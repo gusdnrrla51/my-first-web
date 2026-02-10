@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>하루한줄 — 일기 작성</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F5F0E8;
+      color: #3D3529;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    const emotions = [
+      { emoji: "\u{1F60A}", label: "\uD589\uBCF5", color: "#D4A017" },
+      { emoji: "\u{1F60C}", label: "\uD3C9\uC628", color: "#7BA05B" },
+      { emoji: "\u{1F622}", label: "\uC2AC\uD514", color: "#6B8CAE" },
+      { emoji: "\u{1F624}", label: "\uD654\uB0A8", color: "#C4605A" },
+      { emoji: "\u{1F630}", label: "\uBD88\uC548", color: "#9B7DB8" },
+      { emoji: "\u{1F634}", label: "\uD53C\uACE4", color: "#8E8477" },
+      { emoji: "\u{1F970}", label: "\uC124\uB818", color: "#C97B84" },
+      { emoji: "\u{1F610}", label: "\uBB34\uB364\uB364", color: "#9C9488" },
+      { emoji: "\u{1F914}", label: "\uACE0\uBBFC", color: "#C4884D" },
+      { emoji: "\u{1F60E}", label: "\uBFCC\uB4EF", color: "#5B9EAD" },
+    ];
+
+    const intensityLabels = ["\uC57D\uD568", "\uBCF4\uD1B5", "\uAC15\uD568", "\uB9E4\uC6B0 \uAC15\uD568"];
+
+    const T = {
+      bg: "#F5F0E8",
+      card: "#FFFDF7",
+      cardBorder: "#E8E0D0",
+      input: "#F0EBE1",
+      inputBorder: "#DDD5C5",
+      text: "#3D3529",
+      textSub: "#7A7060",
+      textMuted: "#A89F90",
+      accent: "#B8956A",
+      accentLight: "#D4BA94",
+      tag: "#EDE7DA",
+      tagBorder: "#D9D0C0",
+      hover: "#EAE4D8",
+      divider: "#E5DDD0",
+    };
+
+    const mapIcons = {
+      naver: (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect width="18" height="18" rx="4" fill="#03C75A" />
+          <path d="M10.2 9.5L7.6 5.5H5.5V12.5H7.8V8.5L10.4 12.5H12.5V5.5H10.2V9.5Z" fill="white" />
+        </svg>
+      ),
+      google: (
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect width="18" height="18" rx="4" fill="#4285F4" />
+          <circle cx="9" cy="7.5" r="2.5" stroke="white" strokeWidth="1.5" fill="none" />
+          <path d="M9 10C9 10 5 12 5 14H13C13 12 9 10 9 10Z" fill="white" opacity="0.7" />
+        </svg>
+      ),
+    };
+
+    function LocationItem({ loc, onRemove, onUpdate }) {
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: T.input, borderRadius: 8, marginBottom: 6, border: `1px solid ${T.inputBorder}` }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              onClick={() => onUpdate({ ...loc, mapType: "naver" })}
+              style={{ background: loc.mapType === "naver" ? "#E8F5ED" : T.card, border: loc.mapType === "naver" ? "1.5px solid #03C75A" : `1.5px solid ${T.tagBorder}`, borderRadius: 6, padding: "3px 6px", cursor: "pointer", display: "flex", alignItems: "center" }}
+            >
+              {mapIcons.naver}
+            </button>
+            <button
+              onClick={() => onUpdate({ ...loc, mapType: "google" })}
+              style={{ background: loc.mapType === "google" ? "#E8EFF8" : T.card, border: loc.mapType === "google" ? "1.5px solid #4285F4" : `1.5px solid ${T.tagBorder}`, borderRadius: 6, padding: "3px 6px", cursor: "pointer", display: "flex", alignItems: "center" }}
+            >
+              {mapIcons.google}
+            </button>
+          </div>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke={T.textMuted} strokeWidth="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" /><circle cx="12" cy="9" r="2.5" /></svg>
+            <input
+              value={loc.name}
+              onChange={e => onUpdate({ ...loc, name: e.target.value })}
+              placeholder="\uC7A5\uC18C\uBA85\uC744 \uC785\uB825\uD558\uC138\uC694"
+              style={{ flex: 1, background: "transparent", border: "none", color: T.text, fontSize: 14, outline: "none" }}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, background: T.card, borderRadius: 6, padding: "4px 8px", border: `1px solid ${T.inputBorder}` }}>
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke={T.textMuted} strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+            <input type="time" value={loc.startTime} onChange={e => onUpdate({ ...loc, startTime: e.target.value })} style={{ background: "transparent", border: "none", color: T.textSub, fontSize: 13, outline: "none", width: 70 }} />
+            <span style={{ color: T.textMuted, fontSize: 12 }}>~</span>
+            <input type="time" value={loc.endTime} onChange={e => onUpdate({ ...loc, endTime: e.target.value })} style={{ background: "transparent", border: "none", color: T.textSub, fontSize: 13, outline: "none", width: 70 }} />
+          </div>
+          <button onClick={onRemove} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, padding: "0 4px", lineHeight: 1 }}>&times;</button>
+        </div>
+      );
+    }
+
+    function PaymentItem({ item, onRemove }) {
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: T.input, borderRadius: 8, marginBottom: 6, border: `1px solid ${T.inputBorder}` }}>
+          <span style={{ fontSize: 16 }}>{"\u{1F4B3}"}</span>
+          <span style={{ flex: 1, color: T.text, fontSize: 14 }}>{item.store}</span>
+          <span style={{ color: T.textMuted, fontSize: 13, background: T.tag, padding: "2px 8px", borderRadius: 6 }}>{item.category}</span>
+          <span style={{ color: T.accent, fontSize: 14, fontWeight: 600, minWidth: 80, textAlign: "right" }}>{item.amount}</span>
+          <button onClick={onRemove} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18, padding: "0 4px" }}>&times;</button>
+        </div>
+      );
+    }
+
+    function ActivityButton({ act, defaultSelected }) {
+      const [selected, setSelected] = useState(defaultSelected);
+      return (
+        <button onClick={() => setSelected(!selected)} style={{
+          background: selected ? T.accent + "18" : T.tag,
+          border: selected ? `1.5px solid ${T.accent}` : `1.5px solid ${T.tagBorder}`,
+          borderRadius: 8, padding: "6px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+        }}>
+          <span style={{ fontSize: 15 }}>{act.emoji}</span>
+          <span style={{ fontSize: 13, color: selected ? T.accent : T.textMuted }}>{act.label}</span>
+        </button>
+      );
+    }
+
+    function DiaryApp() {
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}\uB144 ${today.getMonth() + 1}\uC6D4 ${today.getDate()}\uC77C`;
+      const dayNames = ["\uC77C", "\uC6D4", "\uD654", "\uC218", "\uBAA9", "\uAE08", "\uD1A0"];
+      const dayStr = dayNames[today.getDay()] + "\uC694\uC77C";
+
+      const [title, setTitle] = useState("");
+      const [locations, setLocations] = useState([
+        { id: 1, mapType: "naver", name: "\uC2A4\uD0C0\uBC85\uC2A4 \uAC15\uB0A8\uC5ED\uC810", startTime: "10:00", endTime: "11:30" },
+        { id: 2, mapType: "google", name: "\uCF54\uC5D1\uC2A4\uBAB0", startTime: "13:00", endTime: "15:00" },
+      ]);
+      const [nextLocId, setNextLocId] = useState(3);
+      const [payments, setPayments] = useState([
+        { id: 1, store: "\uC2A4\uD0C0\uBC85\uC2A4 \uAC15\uB0A8\uC5ED\uC810", amount: "6,500\uC6D0", category: "\uCE74\uD398" },
+        { id: 2, store: "\uBC84\uAC70\uD0B9 \uCF54\uC5D1\uC2A4\uC810", amount: "12,800\uC6D0", category: "\uC2DD\uC0AC" },
+      ]);
+      const [isProcessing, setIsProcessing] = useState(false);
+      const [showUploadArea, setShowUploadArea] = useState(false);
+      const [selectedEmotions, setSelectedEmotions] = useState([0, 6]);
+      const [emotionIntensity, setEmotionIntensity] = useState(2);
+      const [emotionDiary, setEmotionDiary] = useState("");
+      const [activityDiary, setActivityDiary] = useState("");
+      const [activeTab, setActiveTab] = useState("emotion");
+
+      const addLocation = () => {
+        setLocations([...locations, { id: nextLocId, mapType: "naver", name: "", startTime: "", endTime: "" }]);
+        setNextLocId(nextLocId + 1);
+      };
+
+      const toggleEmotion = (idx) => {
+        setSelectedEmotions(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]);
+      };
+
+      const simulateAI = () => {
+        setIsProcessing(true);
+        setShowUploadArea(false);
+        setTimeout(() => {
+          setPayments(prev => [...prev, { id: Date.now(), store: "\uC62C\uB9AC\uBE0C\uC601 \uC0BC\uC131\uC810", amount: "23,400\uC6D0", category: "\uC1FC\uD551" }]);
+          setIsProcessing(false);
+        }, 2000);
+      };
+
+      const totalAmount = payments.reduce((sum, p) => sum + parseInt(p.amount.replace(/[^0-9]/g, "")), 0);
+
+      const activities = [
+        { emoji: "\u{1F4BC}", label: "\uC5C5\uBB34" },
+        { emoji: "\u{1F4DA}", label: "\uACF5\uBD80" },
+        { emoji: "\u{1F3CB}\uFE0F", label: "\uC6B4\uB3D9" },
+        { emoji: "\u{1F37D}\uFE0F", label: "\uC2DD\uC0AC" },
+        { emoji: "\u2615", label: "\uCE74\uD398" },
+        { emoji: "\u{1F6D2}", label: "\uC1FC\uD551" },
+        { emoji: "\u{1F3AC}", label: "\uC601\uD654" },
+        { emoji: "\u{1F465}", label: "\uBAA8\uC784" },
+        { emoji: "\u{1F3E0}", label: "\uC9D1" },
+        { emoji: "\u{1F6B6}", label: "\uC0B0\uCC45" },
+      ];
+
+      return (
+        <div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+          <div style={{ maxWidth: 780, margin: "0 auto", padding: "32px 24px 80px" }}>
+            {/* Header */}
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, color: T.textMuted, fontSize: 13 }}>
+                <span>{"\u{1F4D6}"} \uC77C\uAE30\uC7A5</span>
+                <span style={{ color: T.tagBorder }}>/</span>
+                <span>{dateStr}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 32 }}>{"\u{1F4DD}"}</span>
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder={`${dateStr} ${dayStr}\uC758 \uC77C\uAE30`}
+                  style={{ flex: 1, background: "transparent", border: "none", color: T.text, fontSize: 32, fontWeight: 700, outline: "none", padding: 0 }}
+                />
+              </div>
+              <div style={{ fontSize: 13, color: T.textMuted }}>
+                {"\u{1F550}"} \uC0DD\uC131\uC77C {dateStr} {today.getHours()}:{String(today.getMinutes()).padStart(2, "0")}
+              </div>
+            </div>
+
+            {/* Properties */}
+            <div style={{ background: T.card, borderRadius: 12, border: `1px solid ${T.cardBorder}`, marginBottom: 24, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+              {/* Locations */}
+              <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.divider}` }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 16 }}>{"\u{1F4CD}"}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{"\uBC29\uBB38 \uC704\uCE58"}</span>
+                    <span style={{ fontSize: 12, color: T.textMuted, background: T.tag, padding: "2px 8px", borderRadius: 10 }}>{locations.length}{"\uACF3"}</span>
+                  </div>
+                  <button onClick={addLocation} style={{ background: T.tag, border: `1px solid ${T.tagBorder}`, borderRadius: 6, color: T.textSub, fontSize: 13, padding: "4px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> {"\uC7A5\uC18C \uCD94\uAC00"}
+                  </button>
+                </div>
+                <div>
+                  <div style={{ display: "flex", gap: 4, marginBottom: 8, paddingLeft: 4 }}>
+                    <span style={{ fontSize: 11, color: T.textMuted, width: 68 }}>{"\uC9C0\uB3C4 \uC120\uD0DD"}</span>
+                    <span style={{ fontSize: 11, color: T.textMuted, flex: 1 }}>{"\uC7A5\uC18C\uBA85"}</span>
+                    <span style={{ fontSize: 11, color: T.textMuted, width: 190, textAlign: "center" }}>{"\uBC29\uBB38 \uC2DC\uAC04"}</span>
+                    <span style={{ width: 22 }} />
+                  </div>
+                  {locations.map(loc => (
+                    <LocationItem key={loc.id} loc={loc} onRemove={() => setLocations(locations.filter(l => l.id !== loc.id))} onUpdate={u => setLocations(locations.map(l => l.id === loc.id ? u : l))} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Payments */}
+              <div style={{ padding: "16px 20px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 16 }}>{"\u{1F4B3}"}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{"\uCE74\uB4DC \uACB0\uC81C \uB0B4\uC5ED"}</span>
+                    <span style={{ fontSize: 12, color: T.textMuted, background: T.tag, padding: "2px 8px", borderRadius: 10 }}>{payments.length}{"\uAC74"}</span>
+                    <span style={{ fontSize: 12, color: T.accent, fontWeight: 600, marginLeft: 4 }}>{"\uCD1D"} {totalAmount.toLocaleString()}{"\uC6D0"}</span>
+                  </div>
+                  <button onClick={() => setShowUploadArea(!showUploadArea)} style={{ background: T.tag, border: `1px solid ${T.tagBorder}`, borderRadius: 6, color: T.textSub, fontSize: 13, padding: "4px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ fontSize: 14 }}>{"\u{1F4F7}"}</span> {"\uCEA1\uCC98 \uCCA8\uBD80"}
+                  </button>
+                </div>
+
+                {showUploadArea && (
+                  <div onClick={simulateAI} style={{ border: `2px dashed ${T.tagBorder}`, borderRadius: 10, padding: "28px 20px", textAlign: "center", marginBottom: 12, cursor: "pointer", background: T.input, transition: "border-color 0.2s" }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = T.accent}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = T.tagBorder}
+                  >
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>{"\u{1F4F8}"}</div>
+                    <div style={{ color: T.textSub, fontSize: 14, marginBottom: 4 }}>{"\uCE74\uB4DC \uACB0\uC81C \uCEA1\uCC98 \uC774\uBBF8\uC9C0\uB97C \uB4DC\uB798\uADF8\uD558\uAC70\uB098 \uD074\uB9AD\uD558\uC138\uC694"}</div>
+                    <div style={{ color: T.textMuted, fontSize: 12 }}>{"AI\uAC00 \uC790\uB3D9\uC73C\uB85C \uD56D\uBAA9\uC744 \uC778\uC2DD\uD569\uB2C8\uB2E4"}</div>
+                  </div>
+                )}
+
+                {isProcessing && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "#F0EAD6", borderRadius: 8, marginBottom: 12, border: `1px solid ${T.accentLight}` }}>
+                    <div style={{ width: 20, height: 20, border: `2px solid ${T.accent}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                    <span style={{ color: T.accent, fontSize: 14 }}>{"\u{1F916}"} {"AI\uAC00 \uACB0\uC81C \uB0B4\uC5ED\uC744 \uBD84\uC11D\uD558\uACE0 \uC788\uC2B5\uB2C8\uB2E4..."}</span>
+                  </div>
+                )}
+
+                {payments.map(p => (
+                  <PaymentItem key={p.id} item={p} onRemove={() => setPayments(payments.filter(x => x.id !== p.id))} />
+                ))}
+              </div>
+            </div>
+
+            {/* Diary Tabs */}
+            <div style={{ display: "flex", gap: 4, marginBottom: 0 }}>
+              {[
+                { key: "emotion", icon: "\u{1FAE7}", label: "\uAC10\uC815 \uC77C\uAE30" },
+                { key: "activity", icon: "\u{1F3C3}", label: "\uD65C\uB3D9 \uC77C\uAE30" },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  style={{
+                    background: activeTab === tab.key ? T.card : "transparent",
+                    border: activeTab === tab.key ? `1px solid ${T.cardBorder}` : "1px solid transparent",
+                    borderBottom: activeTab === tab.key ? `1px solid ${T.card}` : `1px solid ${T.cardBorder}`,
+                    borderRadius: "10px 10px 0 0",
+                    padding: "10px 20px",
+                    color: activeTab === tab.key ? T.text : T.textMuted,
+                    fontSize: 14,
+                    fontWeight: activeTab === tab.key ? 600 : 400,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    position: "relative",
+                    bottom: -1,
+                    zIndex: activeTab === tab.key ? 1 : 0,
+                  }}
+                >
+                  <span>{tab.icon}</span> {tab.label}
+                </button>
+              ))}
+              <div style={{ flex: 1, borderBottom: `1px solid ${T.cardBorder}` }} />
+            </div>
+
+            {/* Diary Content */}
+            <div style={{ background: T.card, borderRadius: "0 12px 12px 12px", border: `1px solid ${T.cardBorder}`, borderTop: "none", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+              {activeTab === "emotion" && (
+                <div style={{ padding: "20px 24px" }}>
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>{"\uC624\uB298\uC758 \uAC10\uC815\uC744 \uC120\uD0DD\uD558\uC138\uC694"}</span>
+                      <span style={{ color: T.tagBorder, fontSize: 12 }}>{"(\uBCF5\uC218 \uC120\uD0DD \uAC00\uB2A5)"}</span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {emotions.map((em, idx) => {
+                        const sel = selectedEmotions.includes(idx);
+                        return (
+                          <button key={idx} onClick={() => toggleEmotion(idx)} style={{
+                            background: sel ? em.color + "18" : T.tag,
+                            border: sel ? `2px solid ${em.color}` : `2px solid ${T.tagBorder}`,
+                            borderRadius: 10,
+                            padding: "8px 14px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            transition: "all 0.15s",
+                          }}>
+                            <span style={{ fontSize: 18 }}>{em.emoji}</span>
+                            <span style={{ fontSize: 13, color: sel ? em.color : T.textMuted, fontWeight: sel ? 600 : 400 }}>{em.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {selectedEmotions.length > 0 && (
+                    <div style={{ marginBottom: 20 }}>
+                      <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>{"\uAC10\uC815 \uAC15\uB3C4"}</div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {intensityLabels.map((label, i) => (
+                          <button key={i} onClick={() => setEmotionIntensity(i)} style={{
+                            flex: 1, height: 34, borderRadius: 6, border: "none", cursor: "pointer",
+                            background: i <= emotionIntensity
+                              ? `${emotions[selectedEmotions[0]]?.color || T.accent}${i === emotionIntensity ? "bb" : "44"}`
+                              : T.tag,
+                            color: i <= emotionIntensity ? "#fff" : T.textMuted,
+                            fontSize: 12, fontWeight: i === emotionIntensity ? 600 : 400,
+                            transition: "all 0.15s",
+                            textShadow: i <= emotionIntensity ? "0 1px 2px rgba(0,0,0,0.2)" : "none",
+                          }}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedEmotions.length > 0 && (
+                    <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+                      {selectedEmotions.map(idx => (
+                        <span key={idx} style={{
+                          background: emotions[idx].color + "18",
+                          color: emotions[idx].color,
+                          padding: "4px 12px",
+                          borderRadius: 20,
+                          fontSize: 13,
+                          fontWeight: 500,
+                          border: `1px solid ${emotions[idx].color}44`,
+                        }}>
+                          {emotions[idx].emoji} {emotions[idx].label} &middot; {intensityLabels[emotionIntensity]}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <textarea value={emotionDiary} onChange={e => setEmotionDiary(e.target.value)}
+                    placeholder={"\uC624\uB298 \uB290\uB08C \uAC10\uC815\uC5D0 \uB300\uD574 \uC790\uC720\uB86D\uAC8C \uC801\uC5B4\uBCF4\uC138\uC694...\n\n\uC5B4\uB5A4 \uC21C\uAC04\uC5D0 \uC5B4\uB5A4 \uAC10\uC815\uC744 \uB290\uBEFC\uB098\uC694?\n\uADF8 \uAC10\uC815\uC774 \uC0DD\uAE34 \uC774\uC720\uAC00 \uBB34\uC5C7\uC778 \uAC83 \uAC19\uB098\uC694?"}
+                    style={{ width: "100%", minHeight: 200, background: T.input, border: `1px solid ${T.inputBorder}`, borderRadius: 10, color: T.text, fontSize: 15, lineHeight: 1.8, padding: 16, outline: "none", resize: "vertical", boxSizing: "border-box" }}
+                  />
+                </div>
+              )}
+
+              {activeTab === "activity" && (
+                <div style={{ padding: "20px 24px" }}>
+                  <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 12 }}>{"\uC624\uB298 \uD55C \uD65C\uB3D9\uB4E4\uC744 \uAE30\uB85D\uD558\uC138\uC694"}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+                    {activities.map((act, i) => (
+                      <ActivityButton key={i} act={act} defaultSelected={i < 3} />
+                    ))}
+                  </div>
+
+                  <textarea value={activityDiary} onChange={e => setActivityDiary(e.target.value)}
+                    placeholder={"\uC624\uB298\uC758 \uD65C\uB3D9\uC744 \uAE30\uB85D\uD574\uBCF4\uC138\uC694...\n\n\uBB34\uC5C7\uC744 \uD588\uB098\uC694? \uB204\uAD6C\uB97C \uB9CC\uB0AC\uB098\uC694?\n\uD2B9\uBCC4\uD588\uB358 \uC77C\uC774 \uC788\uC5C8\uB098\uC694?"}
+                    style={{ width: "100%", minHeight: 200, background: T.input, border: `1px solid ${T.inputBorder}`, borderRadius: 10, color: T.text, fontSize: 15, lineHeight: 1.8, padding: 16, outline: "none", resize: "vertical", boxSizing: "border-box" }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", alignItems: "center", color: T.textMuted, fontSize: 12, padding: "0 4px" }}>
+              <span>{"\uB9C8\uC9C0\uB9C9 \uC800\uC7A5: \uBC29\uAE08 \uC804"}</span>
+              <div style={{ display: "flex", gap: 12 }}>
+                <span>{"\u{1F4CD}"} {locations.length}{"\uACF3"}</span>
+                <span>{"\u{1F4B3}"} {payments.length}{"\uAC74"}</span>
+                <span>{"\u270F\uFE0F"} {emotionDiary.length + activityDiary.length}{"\uC790"}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<DiaryApp />);
+  </script>
+</body>
+</html>
