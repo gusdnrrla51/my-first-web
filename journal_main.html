@@ -178,7 +178,7 @@
                 <div style={{ fontSize: 13, color: T.textSub, marginBottom: 6 }}>{fmt(diary.date)}{isToday(diary.date) && <span style={{ background: T.accent, color: "#fff", fontSize: 10, padding: "2px 10px", borderRadius: 10, marginLeft: 10 }}>오늘</span>}</div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: T.text }}>{diary.title}</div>
               </div>
-              {isToday(diary.date) && <button style={{ background: T.accentBg, border: `1px solid ${T.accentLight}`, borderRadius: 10, padding: "8px 18px", fontSize: 13, color: T.accent, fontWeight: 600, cursor: "pointer" }}>수정하기</button>}
+              {isToday(diary.date) && <button onClick={() => { window.location.href = "journal.html"; }} style={{ background: T.accentBg, border: `1px solid ${T.accentLight}`, borderRadius: 10, padding: "8px 18px", fontSize: 13, color: T.accent, fontWeight: 600, cursor: "pointer" }}>수정하기</button>}
             </div>
           </div>
 
@@ -574,7 +574,7 @@
 
           {showFilter && <FilterModal onClose={() => setShowFilter(false)} onApply={() => setShowFilter(false)} s={sd} e={ed} setS={setSd} setE={setEd} />}
           {showAI && <AIChatModal onClose={() => setShowAI(false)} diaries={MOCK} />}
-          {showToast && <Toast onClose={() => setShowToast(false)} onConfirm={() => { setShowToast(false); alert("오늘 일기 수정 화면으로 이동"); }} />}
+          {showToast && <Toast onClose={() => setShowToast(false)} onConfirm={() => { window.location.href = "journal.html"; }} />}
         </div>
       );
     }
