@@ -60,7 +60,7 @@
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
       useEffect(() => {
-        const saved = null; // simulate check
+        const saved = null;
         setTimeout(() => setLoading(false), 800);
       }, []);
       const login = (provider, email, pw) => {
@@ -83,6 +83,7 @@
 
     // ═══ Mock Data ═══
     const INIT_DIARIES = [
+      { id:0, date:"2026-02-13", title:"발렌타인 전날의 설렘", emotions:[{key:"excited",intensity:4},{key:"happy",intensity:3},{key:"anxious",intensity:2}], places:[{name:"강남 백화점",isFirst:false},{name:"청담 꽃집",isFirst:true}], payments:[{store:"고디바 초콜릿",amount:42000,category:"선물"},{store:"청담 꽃집",amount:35000,category:"선물"}], activities:["🛒 쇼핑","🚶 산책"], steps:9870, content:"내일이 발렌타인데이라 선물을 사러 갔다.\n\n청담 꽃집을 처음 가봤는데 분위기가 너무 좋았다. 장미 한 다발과 초콜릿을 샀다.\n\n내일이 기대된다." },
       { id:1, date:"2026-02-12", title:"봄이 오는 느낌의 하루", emotions:[{key:"happy",intensity:4},{key:"grateful",intensity:3},{key:"peaceful",intensity:2}], places:[{name:"한남동 카페",isFirst:false},{name:"이태원 골목길",isFirst:true}], payments:[{store:"카페 온도",amount:8500,category:"카페"},{store:"이태원 파스타집",amount:36500,category:"외식"}], activities:["☕ 카페","📸 사진"], steps:8234, content:"오늘은 날씨가 유난히 따뜻했다.\n\n한남동 카페에서 라떼를 마시면서 창밖을 바라봤다.\n\n오후에는 이태원 골목길을 처음 걸어봤다. 다음에도 꼭 다시 오고 싶다." },
       { id:2, date:"2026-02-11", title:"회사에서 좋은 피드백을 받은 날", emotions:[{key:"proud",intensity:4},{key:"happy",intensity:3},{key:"excited",intensity:2}], places:[{name:"강남 오피스",isFirst:false},{name:"역삼동 맛집",isFirst:true}], payments:[{store:"역삼 초밥집",amount:25000,category:"외식"},{store:"편의점",amount:7000,category:"편의점"}], activities:["💻 코딩","👥 모임"], steps:6102, content:"프로젝트 발표를 했는데 팀장님이 정말 잘했다고 칭찬해주셨다." },
       { id:3, date:"2026-02-10", title:"비 오는 일요일", emotions:[{key:"peaceful",intensity:3},{key:"sad",intensity:2},{key:"lonely",intensity:2}], places:[{name:"집",isFirst:false},{name:"동네 편의점",isFirst:false}], payments:[{store:"편의점",amount:8000,category:"편의점"}], activities:["🎬 영화","🏠 집"], steps:1820, content:"비가 많이 와서 하루종일 집에 있었다. 넷플릭스를 보면서 쉬었다." },
@@ -421,25 +422,87 @@
 
     // ═══ Stats Tab ═══
     function StatsTab({diaries}) {
+      const [subTab, setSubTab] = useState("all");
       const allEmo = {}; diaries.forEach(d=>d.emotions.forEach(e=>{allEmo[e.key]=(allEmo[e.key]||0)+e.intensity;}));
-      const sorted = Object.entries(allEmo).sort((a,b)=>b[1]-a[1]);
-      const maxV = sorted[0]?.[1]||1;
+      const emoSorted = Object.entries(allEmo).sort((a,b)=>b[1]-a[1]);
+      const maxEmo = emoSorted[0]?.[1]||1;
+      const allAct = {}; diaries.forEach(d=>(d.activities||[]).forEach(a=>{allAct[a]=(allAct[a]||0)+1;}));
+      const actSorted = Object.entries(allAct).sort((a,b)=>b[1]-a[1]);
+      const maxAct = actSorted[0]?.[1]||1;
       const kws = ["일상의 감사","카페 탐방","직장 성취","친구와의 시간","산책과 휴식"];
+      const tabBtn = (id,label) => (<button key={id} onClick={()=>setSubTab(id)} style={{padding:"9px 20px",borderRadius:20,border:`1.5px solid ${subTab===id?T.accent:T.border}`,background:subTab===id?T.accentBg:T.card,color:subTab===id?T.accent:T.textSub,fontSize:13,fontWeight:subTab===id?700:500,cursor:"pointer",transition:"all 0.15s"}}>{label}</button>);
+
       return (
         <div style={{maxWidth:700,margin:"0 auto"}}>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:20}}>통계</div>
-          <div style={{background:T.card,borderRadius:16,padding:24,marginBottom:16,boxShadow:T.shadow}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:16}}>감정 트리맵</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {sorted.map(([k,v])=>{const e=EMOTIONS[k];const pct=Math.max((v/maxV)*100,20);return(
-                <div key={k} style={{width:`${pct}%`,minWidth:60,padding:"14px 10px",borderRadius:12,background:e.color+"33",textAlign:"center",flexGrow:v>maxV*0.5?2:1}}>
-                  <div style={{fontSize:22}}>{e.emoji}</div>
-                  <div style={{fontSize:11,fontWeight:600,color:T.text,marginTop:4}}>{e.label}</div>
-                  <div style={{fontSize:10,color:T.textSub}}>{v}점</div>
-                </div>
-              );})}
-            </div>
+          <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:16}}>통계</div>
+          {/* Sub Tabs */}
+          <div style={{display:"flex",gap:8,marginBottom:20}}>
+            {tabBtn("all","전체")}{tabBtn("emotion","감정")}{tabBtn("activity","활동")}
           </div>
+
+          {/* Emotion Section */}
+          {(subTab==="all"||subTab==="emotion") && (
+            <div style={{background:T.card,borderRadius:16,padding:24,marginBottom:16,boxShadow:T.shadow}}>
+              <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:16}}>🎭 감정 트리맵</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>
+                {emoSorted.map(([k,v])=>{const e=EMOTIONS[k];const pct=Math.max((v/maxEmo)*100,20);return(
+                  <div key={k} style={{width:`${pct}%`,minWidth:60,padding:"14px 10px",borderRadius:12,background:e.color+"33",textAlign:"center",flexGrow:v>maxEmo*0.5?2:1}}>
+                    <div style={{fontSize:22}}>{e.emoji}</div>
+                    <div style={{fontSize:11,fontWeight:600,color:T.text,marginTop:4}}>{e.label}</div>
+                    <div style={{fontSize:10,color:T.textSub}}>{v}점</div>
+                  </div>
+                );})}
+              </div>
+              {subTab==="emotion" && (
+                <>
+                  <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:12,marginTop:8}}>감정 빈도 순위</div>
+                  {emoSorted.map(([k,v],i)=>{const e=EMOTIONS[k];return(
+                    <div key={k} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+                      <span style={{fontSize:13,fontWeight:700,color:T.textSub,minWidth:20}}>{i+1}</span>
+                      <span style={{fontSize:18}}>{e.emoji}</span>
+                      <span style={{fontSize:13,fontWeight:600,color:T.text,minWidth:50}}>{e.label}</span>
+                      <div style={{flex:1,height:8,borderRadius:4,background:T.border}}>
+                        <div style={{height:"100%",borderRadius:4,background:e.color,width:`${(v/maxEmo)*100}%`,transition:"width 0.3s"}}/>
+                      </div>
+                      <span style={{fontSize:12,color:T.textSub,minWidth:30,textAlign:"right"}}>{v}점</span>
+                    </div>
+                  );})}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Activity Section */}
+          {(subTab==="all"||subTab==="activity") && (
+            <div style={{background:T.card,borderRadius:16,padding:24,marginBottom:16,boxShadow:T.shadow}}>
+              <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:16}}>🏃 활동 통계</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:subTab==="activity"?16:0}}>
+                {actSorted.map(([a,c])=>(
+                  <div key={a} style={{padding:"10px 16px",borderRadius:14,background:T.accentBg,display:"flex",alignItems:"center",gap:6,border:`1px solid ${T.accentLight}`}}>
+                    <span style={{fontSize:13,fontWeight:600,color:T.text}}>{a}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:T.accent,background:T.card,padding:"2px 8px",borderRadius:8}}>{c}회</span>
+                  </div>
+                ))}
+              </div>
+              {subTab==="activity" && actSorted.length>0 && (
+                <>
+                  <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:12}}>활동 빈도 순위</div>
+                  {actSorted.map(([a,c],i)=>(
+                    <div key={a} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+                      <span style={{fontSize:13,fontWeight:700,color:T.textSub,minWidth:20}}>{i+1}</span>
+                      <span style={{fontSize:13,fontWeight:600,color:T.text,minWidth:80}}>{a}</span>
+                      <div style={{flex:1,height:8,borderRadius:4,background:T.border}}>
+                        <div style={{height:"100%",borderRadius:4,background:T.accent,width:`${(c/maxAct)*100}%`,transition:"width 0.3s"}}/>
+                      </div>
+                      <span style={{fontSize:12,color:T.textSub,minWidth:30,textAlign:"right"}}>{c}회</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* AI Keywords & Summary */}
           <div style={{background:T.card,borderRadius:16,padding:24,marginBottom:16,boxShadow:T.shadow}}>
             <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:12}}>AI 키워드</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{kws.map(k=>(<span key={k} style={{padding:"8px 16px",borderRadius:20,background:T.accentBg,fontSize:13,color:T.accent,fontWeight:500}}>#{k}</span>))}</div>
@@ -499,9 +562,10 @@
       const [sd, setSd] = useState("");
       const [ed, setEd] = useState("");
       const [savedToast, setSavedToast] = useState(false);
+      const [showEditConfirm, setShowEditConfirm] = useState(false);
 
       const todayWritten = diaries.some(d=>d.date===today());
-      const streak = (() => { let s=0; const d=new Date(); for(let i=0;i<365;i++){const ds=new Date(d);ds.setDate(ds.getDate()-i);const key=ds.toISOString().slice(0,10);if(diaries.some(x=>x.date===key))s++;else break;} return s; })();
+      const streak = (() => { let s=0; const d=new Date(); const start=todayWritten?0:1; for(let i=start;i<365;i++){const ds=new Date(d);ds.setDate(ds.getDate()-i);const key=ds.toISOString().slice(0,10);if(diaries.some(x=>x.date===key))s++;else break;} return s; })();
 
       const filtered = diaries.filter(d=>{
         if(sd&&d.date<sd) return false;
@@ -576,7 +640,7 @@
                   <button onClick={()=>setShowFilter(true)} style={{padding:"10px 20px",borderRadius:12,border:`1px solid ${T.border}`,background:T.card,color:T.text,fontSize:13,fontWeight:600,cursor:"pointer",boxShadow:T.shadow}}>📅 필터</button>
                   <button onClick={()=>setShowAI(true)} style={{padding:"10px 20px",borderRadius:12,border:`1px solid ${T.border}`,background:T.card,color:T.text,fontSize:13,fontWeight:600,cursor:"pointer",boxShadow:T.shadow}}>🤖 AI 분석</button>
                   <div style={{flex:1}}/>
-                  <button onClick={()=>{if(todayWritten){if(window.confirm("오늘 일기를 이미 작성했습니다.\n수정하시겠어요?"))setWriting(true);}else setWriting(true);}} style={{padding:"10px 24px",borderRadius:12,border:"none",background:todayWritten?T.border:T.gradient,color:todayWritten?T.textSub:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:todayWritten?"none":`0 4px 16px ${T.accent}44`}}>
+                  <button onClick={()=>{if(todayWritten){setShowEditConfirm(true);}else setWriting(true);}} style={{padding:"10px 24px",borderRadius:12,border:"none",background:todayWritten?T.border:T.gradient,color:todayWritten?T.textSub:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:todayWritten?"none":`0 4px 16px ${T.accent}44`}}>
                     ✏️ {todayWritten?"오늘 일기 수정":"일기쓰기"}
                   </button>
                 </div>
@@ -646,6 +710,21 @@
           )}
 
           {showAI && <AIChatModal onClose={()=>setShowAI(false)} diaries={diaries}/>}
+
+          {/* Edit Confirm Modal */}
+          {showEditConfirm && (
+            <div style={{position:"fixed",inset:0,background:"rgba(74,55,40,0.5)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowEditConfirm(false)}>
+              <div onClick={e=>e.stopPropagation()} style={{width:340,background:T.card,borderRadius:20,padding:"32px 28px",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",textAlign:"center"}}>
+                <div style={{fontSize:40,marginBottom:12}}>📝</div>
+                <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:8}}>오늘 일기를 이미 작성했습니다</div>
+                <div style={{fontSize:14,color:T.textSub,marginBottom:24,lineHeight:1.6}}>일기를 수정하실 수 있습니다.<br/>수정하시겠어요?</div>
+                <div style={{display:"flex",gap:12}}>
+                  <button onClick={()=>setShowEditConfirm(false)} style={{flex:1,padding:14,borderRadius:12,border:`1px solid ${T.border}`,background:T.card,fontSize:14,fontWeight:600,color:T.textSub,cursor:"pointer"}}>취소</button>
+                  <button onClick={()=>{setShowEditConfirm(false);setWriting(true);}} style={{flex:1,padding:14,borderRadius:12,border:"none",background:T.accent,color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer"}}>수정하기</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {savedToast && (
             <div style={{position:"fixed",bottom:32,left:"50%",transform:"translateX(-50%)",background:T.accent,color:"#fff",padding:"14px 32px",borderRadius:16,fontSize:14,fontWeight:600,boxShadow:`0 8px 32px ${T.accent}66`,zIndex:2000}}>
