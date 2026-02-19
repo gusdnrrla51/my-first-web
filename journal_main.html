@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-    html { height:100%; min-height:100vh; }
+    html { height:100%; }
     body { font-family:'Noto Sans KR',sans-serif; -webkit-font-smoothing:antialiased; height:100%; overscroll-behavior:none; }
     input, textarea, button, select { font-family:inherit; }
     @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
@@ -29,7 +29,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="text/babel">
-    const { useState, useRef, useEffect, createContext, useContext } = React;
+    const { useState, useRef, useEffect, useCallback, createContext, useContext } = React;
 
     const T = {
       bg:"#F5F0E8",card:"#FFFCF7",accent:"#B8956A",accentLight:"#D4B896",
@@ -65,7 +65,7 @@
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
       useEffect(() => { setTimeout(()=>setLoading(false), 600); }, []);
-      const login = (provider, email) => {
+      const login = (provider, email, pw) => {
         setLoading(true);
         setTimeout(() => {
           setUser({ name: provider==="email"?email.split("@")[0]:provider==="kakao"?"카카오 사용자":provider==="google"?"Google User":"Apple User", email:email||`${provider}@example.com`, provider, joinDate:"2026-01-01" });
@@ -194,7 +194,6 @@
               <div style={{fontSize:13,color:T.textSub,marginBottom:16,lineHeight:1.6}}>가입한 이메일을 입력하시면<br/>재설정 링크를 보내드려요.</div>
               <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" type="email" style={inp} autoCapitalize="none"/>
               <button onClick={()=>{if(!email.includes("@")){setError("올바른 이메일을 입력해주세요.");return;}setError("");alert("비밀번호 재설정 이메일을 발송했습니다.");setMode("login");}} style={{width:"100%",padding:16,borderRadius:12,border:"none",background:T.gradient,color:"#fff",fontSize:16,fontWeight:700,cursor:"pointer",marginTop:14,minHeight:52}}>재설정 링크 보내기</button>
-              {error&&<div style={{marginTop:10,padding:"10px 14px",borderRadius:10,background:"#FFF0EE",color:T.danger,fontSize:13}}>{error}</div>}
               <button onClick={()=>{setMode("login");setError("");}} style={{width:"100%",padding:12,background:"none",border:"none",color:T.textSub,fontSize:14,cursor:"pointer",marginTop:6,minHeight:44}}>← 로그인으로</button>
             </>)}
           </div>
