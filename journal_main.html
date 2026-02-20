@@ -8,14 +8,11 @@
   <title>GYEOL</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- ========================================================
-    📦 전역 CSS 스타일
-    - 모든 요소에 공통으로 적용되는 기본 스타일
-    - 애니메이션 정의 (pulse = 두근두근, slideUp = 위로 등장, fadeIn = 서서히 등장)
-    - 스크롤바 숨기기
-  ======================================================== -->
+  <!-- ✅ [추가] 네이버 지도 SDK — geocoder 서브모듈 포함 -->
+  <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=3mv25em56b&submodules=geocoder"></script>
+
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     html { height:100%; min-height:100vh; }
@@ -29,16 +26,8 @@
   </style>
 </head>
 <body>
-  <!-- 앱이 실제로 그려지는 빈 공간. React가 여기에 화면을 채워넣음 -->
   <div id="root"></div>
 
-  <!-- ========================================================
-    📡 외부 라이브러리 불러오기
-    - Supabase  : 로그인 / 일기 저장 담당 (백엔드 서버 역할)
-    - React     : 화면을 만드는 핵심 도구
-    - ReactDOM  : React를 브라우저에 실제로 그려주는 도구
-    - Babel     : 최신 JS 문법을 브라우저가 이해할 수 있게 변환
-  ======================================================== -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -47,24 +36,37 @@
   <script type="text/babel">
     const { useState, useRef, useEffect, createContext, useContext, useCallback } = React;
 
-    // ========================================================
-    // 🔌 Supabase 연결 설정
-    // - SUPABASE_URL, SUPABASE_ANON_KEY : 우리 DB 주소와 접속 비밀키
-    // - sb : 앱 전체에서 DB에 접근할 때 쓰는 변수 (sb.from(...) 형태로 사용)
-    // - GOOGLE_MAPS_KEY : 일기 상세에서 지도를 보여줄 때 사용
-    // ========================================================
     const GOOGLE_MAPS_KEY = 'AIzaSyDkR5UQ1w9ZVMBvfRXhl3XrzmjCWbu2wb4';
-
     const SUPABASE_URL = 'https://vgtpjvwtpzvxxlizsvos.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ========================================================
-    // 🎨 디자인 테마 (T)
-    // - 앱 전체에서 사용하는 색상과 그림자를 한 곳에 모아둠
-    // - T.bg = 배경색 / T.accent = 포인트 갈색 / T.text = 본문 글자색
-    // - T.danger = 빨간색 (경고) / T.success = 초록색 (성공)
-    // ========================================================
+    // ✅ [추가] 네이버 지도 설정
+    const NAVER_CLIENT_ID     = "3mv25em56b";
+    const NAVER_CLIENT_SECRET = "aYeZn8YMntNBP373gyEa1Szp036vFGO0mOJl5uFq";
+    const CORS_PROXY          = "https://corsproxy.io/?";
+
+    // 네이버 지역 검색 — 상호명 검색 (CORS 프록시 경유)
+    // ⚠️ 실서비스에서는 백엔드 라우트로 교체할 것
+    async function naverSearchPlaces(query) {
+      const apiUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`;
+      try {
+        const res = await fetch(`${CORS_PROXY}${encodeURIComponent(apiUrl)}`, {
+          headers: {
+            "X-Naver-Client-Id": NAVER_CLIENT_ID,
+            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+          },
+        });
+        const data = await res.json();
+        return (data.items || []).map(item => ({
+          name:    item.title.replace(/<[^>]+>/g, ""),
+          address: item.roadAddress || item.address,
+          lat:     parseFloat(item.mapy) / 10000000,
+          lng:     parseFloat(item.mapx) / 10000000,
+        }));
+      } catch { return []; }
+    }
+
     const T = {
       bg:"#F5F0E8", card:"#FFFCF7", accent:"#B8956A", accentLight:"#D4B896",
       accentBg:"#F0E6D6", text:"#4A3728", textSub:"#8B7355", border:"#E8DFD0",
@@ -75,13 +77,6 @@
       danger:"#C97064", success:"#8DB580",
     };
 
-    // ========================================================
-    // 📋 앱 전역 상수 데이터
-    // - EMOTIONS  : 감정 목록 (이모지, 한글 이름, 색상)
-    // - EMO_KEYS  : EMOTIONS의 키만 모아놓은 배열 (반복문에서 사용)
-    // - ACTIVITIES: 활동 태그 목록 (일기 작성 시 선택)
-    // - INTENSITY : 감정 강도 단계 (약함 ~ 매우 강함)
-    // ========================================================
     const EMOTIONS = {
       happy:{emoji:"😊",label:"행복",color:"#E8A87C"},
       sad:{emoji:"😢",label:"슬픔",color:"#8BA4B8"},
@@ -98,14 +93,6 @@
     const ACTIVITIES = ["🏃 운동","📚 독서","🎵 음악","🍳 요리","🎮 게임","☕ 카페","🎬 영화","💻 코딩","🧘 명상","📸 사진","🛒 쇼핑","👥 모임","🚶 산책","🏠 집"];
     const INTENSITY = ["약함","보통","강함","매우 강함"];
 
-    // ========================================================
-    // 🛠️ 유틸리티 함수 (자주 쓰는 계산/변환 모음)
-    // - today()   : 오늘 날짜를 "2025-01-15" 형태로 반환
-    // - fmt()     : 날짜를 "1/15 (수)" 형태로 변환 (목록에서 사용)
-    // - fmtFull() : 날짜를 "2025년 1월 15일 수요일" 형태로 변환 (상세에서 사용)
-    // - money()   : 숫자를 "15,000원" 형태로 변환
-    // - isToday() : 입력한 날짜가 오늘인지 true/false 반환
-    // ========================================================
     const today = () => new Date().toISOString().slice(0,10);
     const fmt = d => {
       const x = new Date(d+"T00:00:00");
@@ -120,93 +107,48 @@
     const money = n => (n||0).toLocaleString()+"원";
     const isToday = d => d === today();
 
-    // ========================================================
-    // 🔐 로그인 상태 관리 (Auth Context)
-    // - 앱 어디서든 "지금 로그인한 사람이 누구야?"를 알 수 있게 해주는 시스템
-    // - AuthCtx  : 로그인 정보를 담는 전역 보관함
-    // - useAuth(): 컴포넌트에서 로그인 정보를 꺼낼 때 쓰는 함수
-    // ========================================================
     const AuthCtx = createContext(null);
     const useAuth = () => useContext(AuthCtx);
 
-    // ========================================================
-    // 🔐 AuthProvider - 로그인 상태 관리자
-    // - 앱 전체를 감싸서 로그인 정보를 공급해주는 컴포넌트
-    // - user    : 현재 로그인한 유저 정보 (없으면 null)
-    // - loading : 로그인 확인 중일 때 true (로딩 화면 표시용)
-    // - login() : 이메일/소셜 로그인 실행
-    // - signup(): 회원가입 실행
-    // - logout(): 로그아웃 실행
-    // ========================================================
     function AuthProvider({children}) {
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
-
       useEffect(() => {
-        // 앱 시작 시 이미 로그인 되어있는지 확인
         sb.auth.getSession().then(({ data: { session } }) => {
-          setUser(session?.user ?? null);
-          setLoading(false);
+          setUser(session?.user ?? null); setLoading(false);
         });
-        // 로그인/로그아웃 발생할 때마다 자동으로 감지
         const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
-          setUser(session?.user ?? null);
-          setLoading(false);
+          setUser(session?.user ?? null); setLoading(false);
         });
         return () => subscription.unsubscribe();
       }, []);
-
       const login = async (provider, email, pw) => {
-        setLoading(true);
-        let errMsg = null;
+        setLoading(true); let errMsg = null;
         if (provider === 'email') {
           const { error } = await sb.auth.signInWithPassword({ email, password: pw });
-          if (error) errMsg = error.message === 'Invalid login credentials'
-            ? '이메일 또는 비밀번호가 올바르지 않습니다.' : error.message;
+          if (error) errMsg = error.message === 'Invalid login credentials' ? '이메일 또는 비밀번호가 올바르지 않습니다.' : error.message;
         } else {
-          // 구글 등 소셜 로그인 → 로그인 후 원래 페이지로 돌아오게 설정
           const redirectTo = window.location.origin + window.location.pathname;
-          const { error } = await sb.auth.signInWithOAuth({
-            provider,
-            options: { redirectTo }
-          });
+          const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo } });
           if (error) errMsg = error.message;
         }
-        setLoading(false);
-        return errMsg;
+        setLoading(false); return errMsg;
       };
-
       const signup = async (email, pw, name) => {
-        const { error } = await sb.auth.signUp({
-          email, password: pw,
-          options: { data: { name } }
-        });
-        if (error) return error.message === 'User already registered'
-          ? '이미 가입된 이메일입니다.' : error.message;
+        const { error } = await sb.auth.signUp({ email, password: pw, options: { data: { name } } });
+        if (error) return error.message === 'User already registered' ? '이미 가입된 이메일입니다.' : error.message;
         return null;
       };
-
       const logout = async () => { await sb.auth.signOut(); };
-
-      // 표시할 이름: 소셜 로그인이면 소셜 이름, 이메일이면 @ 앞부분
       const displayName = user?.user_metadata?.name || user?.email?.split('@')[0] || '사용자';
       const displayEmail = user?.email || '';
-
       return (
-        <AuthCtx.Provider value={{
-          user: user ? { ...user, name: displayName, email: displayEmail } : null,
-          loading, login, signup, logout
-        }}>
+        <AuthCtx.Provider value={{ user: user ? { ...user, name: displayName, email: displayEmail } : null, loading, login, signup, logout }}>
           {children}
         </AuthCtx.Provider>
       );
     }
 
-    // ========================================================
-    // ⏳ LoadingScreen - 로딩 화면
-    // - 앱 시작 시 또는 데이터를 불러오는 동안 보여주는 전체화면
-    // - text : 하단에 표시할 안내 문구 (기본값 있음)
-    // ========================================================
     function LoadingScreen({text="나의 결을 불러오는 중..."}) {
       return (
         <div style={{position:"fixed",inset:0,background:T.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -218,170 +160,47 @@
       );
     }
 
-    // ========================================================
-    // 🚪 LoginPage - 로그인/회원가입/비밀번호 찾기 화면
-    // - mode 상태로 세 가지 화면을 하나의 컴포넌트에서 전환
-    //   · "login"  : 기본 로그인 화면 (구글 + 이메일)
-    //   · "signup" : 회원가입 화면 (이름, 이메일, 비밀번호, 약관)
-    //   · "forgot" : 비밀번호 재설정 이메일 전송 화면
-    // - signupDone : 회원가입 완료 후 이메일 확인 안내 화면으로 전환
-    // ========================================================
     function LoginPage() {
       const {login, signup, loading} = useAuth();
       const [mode, setMode] = useState("login");
-      const [email, setEmail] = useState("");
-      const [pw, setPw] = useState("");
-      const [name, setName] = useState("");
-      const [pwConfirm, setPwConfirm] = useState("");
-      const [error, setError] = useState("");
-      const [agreeTerms, setAgreeTerms] = useState(false);
-      const [agreePrivacy, setAgreePrivacy] = useState(false);
-      const [submitting, setSubmitting] = useState(false);
+      const [email, setEmail] = useState(""); const [pw, setPw] = useState("");
+      const [name, setName] = useState(""); const [pwConfirm, setPwConfirm] = useState("");
+      const [error, setError] = useState(""); const [agreeTerms, setAgreeTerms] = useState(false);
+      const [agreePrivacy, setAgreePrivacy] = useState(false); const [submitting, setSubmitting] = useState(false);
       const [signupDone, setSignupDone] = useState(false);
-
       if (loading) return <LoadingScreen text="나의 결을 발견하는 중..."/>;
-
-      // 공통 인풋 스타일 (이 화면에서만 사용)
-      const inp = {
-        width:"100%", padding:"14px 16px", borderRadius:12,
-        border:`1.5px solid ${T.border}`, background:T.card,
-        fontSize:16, color:T.text, outline:"none",
-        boxSizing:"border-box", WebkitAppearance:"none"
-      };
-
-      // 로그인 버튼 클릭 처리
-      const handleLogin = async () => {
-        setError("");
-        if (!email.trim()) return setError("이메일을 입력해주세요.");
-        if (pw.length < 6) return setError("비밀번호는 6자 이상이어야 합니다.");
-        setSubmitting(true);
-        const err = await login("email", email, pw);
-        setSubmitting(false);
-        if (err) setError(err);
-      };
-
-      // 구글 등 소셜 로그인 버튼 클릭 처리
-      const handleSocial = async (provider) => {
-        setError("");
-        setSubmitting(true);
-        const err = await login(provider);
-        setSubmitting(false);
-        if (err) setError(err);
-      };
-
-      // 회원가입 버튼 클릭 처리
-      const handleSignup = async () => {
-        setError("");
-        if (!name.trim()) return setError("이름을 입력해주세요.");
-        if (!email.includes("@")) return setError("올바른 이메일 형식이 아닙니다.");
-        if (pw.length < 6) return setError("비밀번호는 6자 이상이어야 합니다.");
-        if (pw !== pwConfirm) return setError("비밀번호가 일치하지 않습니다.");
-        if (!agreeTerms || !agreePrivacy) return setError("필수 약관에 동의해주세요.");
-        setSubmitting(true);
-        const err = await signup(email, pw, name);
-        setSubmitting(false);
-        if (err) setError(err);
-        else setSignupDone(true);
-      };
-
-      // 비밀번호 재설정 이메일 발송 처리
-      const handleForgot = async () => {
-        if (!email.includes("@")) return setError("올바른 이메일을 입력해주세요.");
-        setSubmitting(true);
-        const { error } = await sb.auth.resetPasswordForEmail(email);
-        setSubmitting(false);
-        if (error) setError(error.message);
-        else { alert("비밀번호 재설정 이메일을 발송했습니다."); setMode("login"); }
-      };
-
-      // 처리 중일 때 버튼을 흐리게 + "처리 중..." 텍스트로 바꿔주는 공통 버튼
+      const inp = { width:"100%", padding:"14px 16px", borderRadius:12, border:`1.5px solid ${T.border}`, background:T.card, fontSize:16, color:T.text, outline:"none", boxSizing:"border-box", WebkitAppearance:"none" };
+      const handleLogin = async () => { setError(""); if (!email.trim()) return setError("이메일을 입력해주세요."); if (pw.length < 6) return setError("비밀번호는 6자 이상이어야 합니다."); setSubmitting(true); const err = await login("email", email, pw); setSubmitting(false); if (err) setError(err); };
+      const handleSocial = async (provider) => { setError(""); setSubmitting(true); const err = await login(provider); setSubmitting(false); if (err) setError(err); };
+      const handleSignup = async () => { setError(""); if (!name.trim()) return setError("이름을 입력해주세요."); if (!email.includes("@")) return setError("올바른 이메일 형식이 아닙니다."); if (pw.length < 6) return setError("비밀번호는 6자 이상이어야 합니다."); if (pw !== pwConfirm) return setError("비밀번호가 일치하지 않습니다."); if (!agreeTerms || !agreePrivacy) return setError("필수 약관에 동의해주세요."); setSubmitting(true); const err = await signup(email, pw, name); setSubmitting(false); if (err) setError(err); else setSignupDone(true); };
+      const handleForgot = async () => { if (!email.includes("@")) return setError("올바른 이메일을 입력해주세요."); setSubmitting(true); const { error } = await sb.auth.resetPasswordForEmail(email); setSubmitting(false); if (error) setError(error.message); else { alert("비밀번호 재설정 이메일을 발송했습니다."); setMode("login"); } };
       const Btn = ({onClick, style, children, disabled}) => (
-        <button onClick={onClick} disabled={disabled||submitting}
-          style={{...style, opacity:submitting?0.7:1, cursor:submitting?"not-allowed":"pointer"}}>
-          {submitting ? "처리 중..." : children}
-        </button>
+        <button onClick={onClick} disabled={disabled||submitting} style={{...style, opacity:submitting?0.7:1, cursor:submitting?"not-allowed":"pointer"}}>{submitting ? "처리 중..." : children}</button>
       );
-
       return (
-        <div style={{
-          minHeight:"100dvh",
-          background:`linear-gradient(180deg,${T.bg} 0%,#EDE5D8 100%)`,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          padding:"20px",
-          paddingTop:`calc(env(safe-area-inset-top,0px) + 20px)`,
-          paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 20px)`,
-          overflowY:"auto"
-        }}>
-          <div style={{
-            width:"100%", maxWidth:420, background:T.card,
-            borderRadius:24, padding:"40px 28px",
-            boxShadow:"0 8px 40px rgba(139,115,85,0.12)"
-          }}>
-            {/* 로고 영역 */}
+        <div style={{ minHeight:"100dvh", background:`linear-gradient(180deg,${T.bg} 0%,#EDE5D8 100%)`, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", paddingTop:`calc(env(safe-area-inset-top,0px) + 20px)`, paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 20px)`, overflowY:"auto" }}>
+          <div style={{ width:"100%", maxWidth:420, background:T.card, borderRadius:24, padding:"40px 28px", boxShadow:"0 8px 40px rgba(139,115,85,0.12)" }}>
             <div style={{textAlign:"center", marginBottom:32}}>
               <div style={{fontSize:32, fontWeight:800, color:T.accent, letterSpacing:6, marginBottom:8}}>GYEOL</div>
               <div style={{fontSize:14, color:T.textSub, marginTop:4, lineHeight:1.6}}>당신은 어떤 결을 가진 사람인가요?</div>
             </div>
-
-            {/* ── 회원가입 완료 안내 화면 ── */}
-            {signupDone && (
-              <div style={{padding:"20px", textAlign:"center"}}>
-                <div style={{fontSize:40, marginBottom:12}}>✉️</div>
-                <div style={{fontSize:16, fontWeight:700, color:T.text, marginBottom:8}}>이메일을 확인해주세요</div>
-                <div style={{fontSize:14, color:T.textSub, lineHeight:1.7, marginBottom:20}}>
-                  가입하신 이메일로 인증 링크를 보냈어요.<br/>링크를 클릭하면 로그인됩니다.
-                </div>
-                <button onClick={()=>{setSignupDone(false);setMode("login");}}
-                  style={{background:"none", border:`1px solid ${T.border}`, borderRadius:10,
-                    padding:"10px 24px", color:T.textSub, fontSize:14, cursor:"pointer"}}>
-                  로그인으로
-                </button>
-              </div>
-            )}
-
-            {/* ── 로그인 화면 ── */}
+            {signupDone && (<div style={{padding:"20px", textAlign:"center"}}><div style={{fontSize:40, marginBottom:12}}>✉️</div><div style={{fontSize:16, fontWeight:700, color:T.text, marginBottom:8}}>이메일을 확인해주세요</div><div style={{fontSize:14, color:T.textSub, lineHeight:1.7, marginBottom:20}}>가입하신 이메일로 인증 링크를 보냈어요.<br/>링크를 클릭하면 로그인됩니다.</div><button onClick={()=>{setSignupDone(false);setMode("login");}} style={{background:"none", border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 24px", color:T.textSub, fontSize:14, cursor:"pointer"}}>로그인으로</button></div>)}
             {!signupDone && mode==="login" && (<>
               <div style={{display:"flex", flexDirection:"column", gap:10, marginBottom:20}}>
-                <button onClick={()=>handleSocial('google')}
-                  style={{padding:"14px 16px", borderRadius:12, border:`1.5px solid ${T.border}`,
-                    background:T.card, color:T.text, fontSize:15, fontWeight:700,
-                    cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, minHeight:50}}>
-                  <span style={{fontSize:16, fontWeight:900}}>G</span> Google로 시작하기
-                </button>
+                <button onClick={()=>handleSocial('google')} style={{padding:"14px 16px", borderRadius:12, border:`1.5px solid ${T.border}`, background:T.card, color:T.text, fontSize:15, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, minHeight:50}}><span style={{fontSize:16, fontWeight:900}}>G</span> Google로 시작하기</button>
               </div>
-              <div style={{display:"flex", alignItems:"center", gap:10, margin:"16px 0"}}>
-                <div style={{flex:1, height:1, background:T.border}}/>
-                <span style={{fontSize:12, color:T.textSub, whiteSpace:"nowrap"}}>또는 이메일</span>
-                <div style={{flex:1, height:1, background:T.border}}/>
-              </div>
+              <div style={{display:"flex", alignItems:"center", gap:10, margin:"16px 0"}}><div style={{flex:1, height:1, background:T.border}}/><span style={{fontSize:12, color:T.textSub, whiteSpace:"nowrap"}}>또는 이메일</span><div style={{flex:1, height:1, background:T.border}}/></div>
               <div style={{display:"flex", flexDirection:"column", gap:10}}>
-                <input value={email} onChange={e=>setEmail(e.target.value)}
-                  placeholder="이메일" type="email" style={inp}
-                  autoCapitalize="none" autoCorrect="off"/>
-                <input value={pw} onChange={e=>setPw(e.target.value)}
-                  placeholder="비밀번호" type="password" style={inp}
-                  onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+                <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" type="email" style={inp} autoCapitalize="none" autoCorrect="off"/>
+                <input value={pw} onChange={e=>setPw(e.target.value)} placeholder="비밀번호" type="password" style={inp} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
               </div>
-              {error && <div style={{marginTop:10, padding:"10px 14px", borderRadius:10,
-                background:"#FFF0EE", color:T.danger, fontSize:13, fontWeight:500}}>{error}</div>}
-              <Btn onClick={handleLogin}
-                style={{width:"100%", padding:16, borderRadius:12, border:"none",
-                  background:T.gradient, color:"#fff", fontSize:16, fontWeight:700, marginTop:16, minHeight:52}}>
-                나의 결 찾기 →
-              </Btn>
+              {error && <div style={{marginTop:10, padding:"10px 14px", borderRadius:10, background:"#FFF0EE", color:T.danger, fontSize:13, fontWeight:500}}>{error}</div>}
+              <Btn onClick={handleLogin} style={{width:"100%", padding:16, borderRadius:12, border:"none", background:T.gradient, color:"#fff", fontSize:16, fontWeight:700, marginTop:16, minHeight:52}}>나의 결 찾기 →</Btn>
               <div style={{display:"flex", justifyContent:"space-between", marginTop:14}}>
-                <button onClick={()=>{setMode("forgot");setError("");}}
-                  style={{background:"none", border:"none", color:T.textSub, fontSize:13, cursor:"pointer", padding:"8px 0", minHeight:40}}>
-                  비밀번호 찾기
-                </button>
-                <button onClick={()=>{setMode("signup");setError("");}}
-                  style={{background:"none", border:"none", color:T.accent, fontSize:13, fontWeight:700, cursor:"pointer", padding:"8px 0", minHeight:40}}>
-                  회원가입 →
-                </button>
+                <button onClick={()=>{setMode("forgot");setError("");}} style={{background:"none", border:"none", color:T.textSub, fontSize:13, cursor:"pointer", padding:"8px 0", minHeight:40}}>비밀번호 찾기</button>
+                <button onClick={()=>{setMode("signup");setError("");}} style={{background:"none", border:"none", color:T.accent, fontSize:13, fontWeight:700, cursor:"pointer", padding:"8px 0", minHeight:40}}>회원가입 →</button>
               </div>
             </>)}
-
-            {/* ── 회원가입 화면 ── */}
             {!signupDone && mode==="signup" && (<>
               <div style={{fontSize:18, fontWeight:700, color:T.text, marginBottom:16}}>회원가입</div>
               <div style={{display:"flex", flexDirection:"column", gap:10}}>
@@ -391,48 +210,20 @@
                 <input value={pwConfirm} onChange={e=>setPwConfirm(e.target.value)} placeholder="비밀번호 확인" type="password" style={inp}/>
               </div>
               <div style={{marginTop:14, display:"flex", flexDirection:"column", gap:10}}>
-                <label style={{display:"flex", alignItems:"center", gap:10, fontSize:14, color:T.text, cursor:"pointer", padding:"4px 0"}}>
-                  <input type="checkbox" checked={agreeTerms} onChange={e=>setAgreeTerms(e.target.checked)} style={{width:18,height:18,accentColor:T.accent}}/>
-                  <span style={{color:T.danger, fontWeight:700}}>[필수]</span> 이용약관 동의
-                </label>
-                <label style={{display:"flex", alignItems:"center", gap:10, fontSize:14, color:T.text, cursor:"pointer", padding:"4px 0"}}>
-                  <input type="checkbox" checked={agreePrivacy} onChange={e=>setAgreePrivacy(e.target.checked)} style={{width:18,height:18,accentColor:T.accent}}/>
-                  <span style={{color:T.danger, fontWeight:700}}>[필수]</span> 개인정보처리방침 동의
-                </label>
+                <label style={{display:"flex", alignItems:"center", gap:10, fontSize:14, color:T.text, cursor:"pointer", padding:"4px 0"}}><input type="checkbox" checked={agreeTerms} onChange={e=>setAgreeTerms(e.target.checked)} style={{width:18,height:18,accentColor:T.accent}}/><span style={{color:T.danger, fontWeight:700}}>[필수]</span> 이용약관 동의</label>
+                <label style={{display:"flex", alignItems:"center", gap:10, fontSize:14, color:T.text, cursor:"pointer", padding:"4px 0"}}><input type="checkbox" checked={agreePrivacy} onChange={e=>setAgreePrivacy(e.target.checked)} style={{width:18,height:18,accentColor:T.accent}}/><span style={{color:T.danger, fontWeight:700}}>[필수]</span> 개인정보처리방침 동의</label>
               </div>
-              {error && <div style={{marginTop:10, padding:"10px 14px", borderRadius:10,
-                background:"#FFF0EE", color:T.danger, fontSize:13}}>{error}</div>}
-              <Btn onClick={handleSignup}
-                style={{width:"100%", padding:16, borderRadius:12, border:"none",
-                  background:T.gradient, color:"#fff", fontSize:16, fontWeight:700, marginTop:16, minHeight:52}}>
-                가입하기
-              </Btn>
-              <button onClick={()=>{setMode("login");setError("");}}
-                style={{width:"100%", padding:12, background:"none", border:"none",
-                  color:T.textSub, fontSize:14, cursor:"pointer", marginTop:6, minHeight:44}}>
-                ← 로그인으로
-              </button>
+              {error && <div style={{marginTop:10, padding:"10px 14px", borderRadius:10, background:"#FFF0EE", color:T.danger, fontSize:13}}>{error}</div>}
+              <Btn onClick={handleSignup} style={{width:"100%", padding:16, borderRadius:12, border:"none", background:T.gradient, color:"#fff", fontSize:16, fontWeight:700, marginTop:16, minHeight:52}}>가입하기</Btn>
+              <button onClick={()=>{setMode("login");setError("");}} style={{width:"100%", padding:12, background:"none", border:"none", color:T.textSub, fontSize:14, cursor:"pointer", marginTop:6, minHeight:44}}>← 로그인으로</button>
             </>)}
-
-            {/* ── 비밀번호 찾기 화면 ── */}
             {mode==="forgot" && (<>
               <div style={{fontSize:18, fontWeight:700, color:T.text, marginBottom:8}}>비밀번호 찾기</div>
-              <div style={{fontSize:13, color:T.textSub, marginBottom:16, lineHeight:1.6}}>
-                가입한 이메일을 입력하시면<br/>재설정 링크를 보내드려요.
-              </div>
+              <div style={{fontSize:13, color:T.textSub, marginBottom:16, lineHeight:1.6}}>가입한 이메일을 입력하시면<br/>재설정 링크를 보내드려요.</div>
               <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" type="email" style={inp} autoCapitalize="none"/>
-              {error && <div style={{marginTop:10, padding:"10px 14px", borderRadius:10,
-                background:"#FFF0EE", color:T.danger, fontSize:13}}>{error}</div>}
-              <Btn onClick={handleForgot}
-                style={{width:"100%", padding:16, borderRadius:12, border:"none",
-                  background:T.gradient, color:"#fff", fontSize:16, fontWeight:700, marginTop:14, minHeight:52}}>
-                재설정 링크 보내기
-              </Btn>
-              <button onClick={()=>{setMode("login");setError("");}}
-                style={{width:"100%", padding:12, background:"none", border:"none",
-                  color:T.textSub, fontSize:14, cursor:"pointer", marginTop:6, minHeight:44}}>
-                ← 로그인으로
-              </button>
+              {error && <div style={{marginTop:10, padding:"10px 14px", borderRadius:10, background:"#FFF0EE", color:T.danger, fontSize:13}}>{error}</div>}
+              <Btn onClick={handleForgot} style={{width:"100%", padding:16, borderRadius:12, border:"none", background:T.gradient, color:"#fff", fontSize:16, fontWeight:700, marginTop:14, minHeight:52}}>재설정 링크 보내기</Btn>
+              <button onClick={()=>{setMode("login");setError("");}} style={{width:"100%", padding:12, background:"none", border:"none", color:T.textSub, fontSize:14, cursor:"pointer", marginTop:6, minHeight:44}}>← 로그인으로</button>
             </>)}
           </div>
         </div>
@@ -440,18 +231,158 @@
     }
 
     // ========================================================
-    // ✏️ DiaryWritePage - 일기 작성/수정 화면 (전체화면 오버레이)
-    // - editData가 있으면 "수정", 없으면 "새 작성" 모드
-    // - tab 상태로 "감정" / "활동" 입력 섹션을 전환
-    // - 저장 버튼 → onSave() 콜백으로 데이터를 MainApp에 전달
-    //
-    // 입력 항목:
-    //   title      : 오늘의 제목
-    //   content    : 일기 본문
-    //   selEmotions: 선택한 감정 목록 + 각 감정별 강도(1~4)
-    //   selActivities: 선택한 활동 태그 목록
-    //   places     : 방문 장소 목록 (직접 입력)
-    //   payments   : 지출 내역 목록 (가게명 + 금액)
+    // ✅ [추가] NaverMapPicker — 전체화면 지도 장소 선택기
+    // DiaryWritePage에서 "장소 추가" 버튼 누르면 이 화면이 뜸
+    // onSelect(place) → { name, address, lat, lng }
+    // ========================================================
+    function NaverMapPicker({ onSelect, onClose }) {
+      const mapRef    = useRef(null);
+      const mapInst   = useRef(null);
+      const markerRef = useRef(null);
+
+      const [query,         setQuery]         = useState("");
+      const [results,       setResults]       = useState([]);
+      const [searching,     setSearching]     = useState(false);
+      const [selectedPlace, setSelectedPlace] = useState(null);
+      const [showMap,       setShowMap]       = useState(false);
+
+      // 지도 탭 열릴 때 초기화
+      useEffect(() => {
+        if (!showMap || !mapRef.current || mapInst.current) return;
+        if (!window.naver?.maps) return;
+        const map = new window.naver.maps.Map(mapRef.current, {
+          center: new window.naver.maps.LatLng(37.5665, 126.978),
+          zoom: 15,
+        });
+        mapInst.current = map;
+        // 지도 클릭 → ReverseGeocode
+        window.naver.maps.Event.addListener(map, "click", e => {
+          const ll = e.coord;
+          placeMarker(ll);
+          window.naver.maps.Service.reverseGeocode(
+            { coords: ll, orders: [window.naver.maps.Service.OrderType.ROAD_ADDR, window.naver.maps.Service.OrderType.ADDR] },
+            (status, response) => {
+              const r = response.v2?.results?.[0];
+              if (!r) return;
+              const reg = r.region; const land = r.land;
+              const addr = `${reg.area1.name} ${reg.area2.name} ${reg.area3.name} ${land?.name||""} ${land?.number1||""}`.trim();
+              setSelectedPlace({ name: addr, address: addr, lat: ll.lat(), lng: ll.lng() });
+            }
+          );
+        });
+      }, [showMap]);
+
+      const placeMarker = ll => {
+        if (markerRef.current) markerRef.current.setMap(null);
+        markerRef.current = new window.naver.maps.Marker({ position: ll, map: mapInst.current, animation: window.naver.maps.Animation.DROP });
+        mapInst.current.panTo(ll);
+      };
+
+      const handleSearch = async () => {
+        if (!query.trim()) return;
+        setSearching(true);
+        setResults(await naverSearchPlaces(query));
+        setSearching(false);
+      };
+
+      // 검색 결과 선택 → 지도 이동
+      const handlePick = place => {
+        setSelectedPlace(place);
+        setResults([]);
+        setQuery(place.name);
+        setShowMap(true);
+        setTimeout(() => {
+          if (!mapInst.current || !window.naver) return;
+          const ll = new window.naver.maps.LatLng(place.lat, place.lng);
+          placeMarker(ll);
+          mapInst.current.setCenter(ll);
+          mapInst.current.setZoom(17);
+        }, 300);
+      };
+
+      return (
+        <div style={{ position:"fixed", inset:0, zIndex:300, background:T.bg, display:"flex", flexDirection:"column", fontFamily:"'Noto Sans KR',sans-serif" }}>
+          {/* 헤더 */}
+          <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 16px", paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
+            <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:T.textSub,minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>←</button>
+            <span style={{fontSize:17, fontWeight:700, color:T.text}}>방문 장소 검색</span>
+          </div>
+
+          {/* 검색바 */}
+          <div style={{ background:T.card, padding:"12px 16px 14px", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+            <div style={{display:"flex", gap:8}}>
+              <input
+                value={query} onChange={e=>setQuery(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&handleSearch()}
+                placeholder="장소 검색 (예: 사당 스타벅스)"
+                style={{ flex:1, padding:"11px 14px", border:`1.5px solid ${T.accentLight}`, borderRadius:10, fontSize:16, background:T.bg, outline:"none", color:T.text, WebkitAppearance:"none" }}
+              />
+              <button onClick={handleSearch} disabled={searching}
+                style={{ padding:"11px 18px", background:T.accent, color:"#fff", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor:"pointer", minHeight:44, opacity:searching?0.7:1 }}>
+                {searching ? "…" : "검색"}
+              </button>
+            </div>
+
+            {/* 검색 결과 드롭다운 */}
+            {results.length > 0 && (
+              <div style={{ marginTop:8, background:T.card, border:`1px solid ${T.border}`, borderRadius:12, overflow:"hidden", boxShadow:"0 4px 20px rgba(0,0,0,0.1)" }}>
+                {results.map((p, i) => (
+                  <div key={i} onClick={()=>handlePick(p)}
+                    style={{ padding:"13px 16px", borderBottom:i<results.length-1?`1px solid ${T.border}`:"none", cursor:"pointer" }}>
+                    <div style={{fontWeight:600, fontSize:14, color:T.text}}>📍 {p.name}</div>
+                    <div style={{fontSize:12, color:T.textSub, marginTop:3}}>{p.address}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 탭 전환 */}
+            <div style={{display:"flex", gap:8, marginTop:10}}>
+              {[["🔍 검색으로 선택", false], ["🗺️ 지도에서 직접 선택", true]].map(([label, val]) => (
+                <button key={label} onClick={()=>setShowMap(val)}
+                  style={{ flex:1, padding:"8px", fontSize:12, fontWeight:600, borderRadius:8, border:"none", cursor:"pointer", minHeight:36, background:showMap===val?T.accent:T.accentBg, color:showMap===val?"#fff":T.textSub }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 지도 / 안내 영역 */}
+          <div style={{flex:1, position:"relative", overflow:"hidden"}}>
+            {showMap ? (
+              <div ref={mapRef} style={{width:"100%", height:"100%"}}/>
+            ) : (
+              <div style={{ height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10, color:T.textSub }}>
+                <div style={{fontSize:48}}>🔍</div>
+                <div style={{fontSize:15, fontWeight:700, color:T.textSub}}>위에서 장소를 검색하세요</div>
+                <div style={{fontSize:13, color:T.textMuted, textAlign:"center", lineHeight:1.7}}>검색 결과에서 선택하거나<br/>"지도에서 직접 선택"을 눌러보세요</div>
+              </div>
+            )}
+            {/* 선택 위치 말풍선 */}
+            {showMap && selectedPlace && (
+              <div style={{ position:"absolute", bottom:90, left:16, right:16, background:T.card, borderRadius:14, padding:"12px 16px", boxShadow:"0 4px 20px rgba(0,0,0,0.12)", border:`1px solid ${T.border}` }}>
+                <div style={{fontSize:11, color:T.accent, fontWeight:700, marginBottom:3}}>📍 선택한 위치</div>
+                <div style={{fontSize:14, fontWeight:700, color:T.text}}>{selectedPlace.name}</div>
+                <div style={{fontSize:12, color:T.textSub, marginTop:2}}>{selectedPlace.address}</div>
+              </div>
+            )}
+          </div>
+
+          {/* 하단 확인 버튼 */}
+          {selectedPlace && (
+            <div style={{ background:T.card, padding:"14px 16px", borderTop:`1px solid ${T.border}`, paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 14px)`, flexShrink:0 }}>
+              <button onClick={()=>onSelect(selectedPlace)}
+                style={{ width:"100%", padding:15, background:T.gradient, color:"#fff", border:"none", borderRadius:14, fontSize:16, fontWeight:700, cursor:"pointer", minHeight:52 }}>
+                이 장소로 기록하기 ✓
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================================
+    // ✏️ DiaryWritePage — 네이버 지도 피커 통합 버전
     // ========================================================
     function DiaryWritePage({onSave, onCancel, editData}) {
       const [title, setTitle] = useState(editData?.title||"");
@@ -459,277 +390,218 @@
       const [selEmotions, setSelEmotions] = useState(editData?.emotions||[]);
       const [selActivities, setSelActivities] = useState(editData?.activities||[]);
       const [places, setPlaces] = useState(editData?.places||[]);
-      const [newPlace, setNewPlace] = useState("");
       const [payments, setPayments] = useState(editData?.payments||[]);
       const [tab, setTab] = useState("emotion");
       const [saving, setSaving] = useState(false);
+      // ✅ [변경] newPlace 텍스트 입력 → 지도 피커 상태로 교체
+      const [showMapPicker, setShowMapPicker] = useState(false);
 
-      // 감정 선택/해제 토글 (최대 5개)
       const toggleEmo = k => {
         const ex = selEmotions.find(e=>e.key===k);
         if (ex) setSelEmotions(selEmotions.filter(e=>e.key!==k));
         else if (selEmotions.length < 5) setSelEmotions([...selEmotions, {key:k, intensity:2}]);
       };
-      // 특정 감정의 강도 변경
       const setIntensity = (k,v) => setSelEmotions(selEmotions.map(e=>e.key===k?{...e,intensity:v}:e));
-      // 활동 선택/해제 토글
       const toggleAct = a => setSelActivities(selActivities.includes(a)?selActivities.filter(x=>x!==a):[...selActivities,a]);
-      // 장소 추가 (입력창 → 목록에 추가)
-      const addPlace = () => { if(newPlace.trim()){setPlaces([...places,{name:newPlace.trim(),isFirst:false}]);setNewPlace("");} };
 
-      // 저장 버튼 클릭: 유효성 검사 후 상위 컴포넌트(MainApp)에 데이터 전달
+      // ✅ [변경] addPlace — 지도 피커에서 선택한 장소 객체를 받아서 추가
+      const addPlace = (place) => {
+        setPlaces(prev => [...prev, { name: place.name, address: place.address, lat: place.lat, lng: place.lng, isFirst: false }]);
+        setShowMapPicker(false);
+      };
+
       const handleSave = async () => {
         if (!title.trim()||!content.trim()||selEmotions.length===0) {
           alert("제목, 내용, 감정을 모두 입력해주세요."); return;
         }
         setSaving(true);
-        await onSave({
-          title, content, emotions:selEmotions, activities:selActivities,
-          places, payments:payments.filter(p=>p.store),
-          date:today()
-        });
+        await onSave({ title, content, emotions:selEmotions, activities:selActivities, places, payments:payments.filter(p=>p.store), date:today() });
         setSaving(false);
       };
 
       const sec = {background:T.card, borderRadius:16, padding:"18px 20px", marginBottom:14, boxShadow:T.shadow};
-      const inp = {
-        width:"100%", padding:"12px 14px", borderRadius:12,
-        border:`1px solid ${T.border}`, background:T.bg,
-        fontSize:16, color:T.text, outline:"none",
-        boxSizing:"border-box", WebkitAppearance:"none"
-      };
+      const inp = { width:"100%", padding:"12px 14px", borderRadius:12, border:`1px solid ${T.border}`, background:T.bg, fontSize:16, color:T.text, outline:"none", boxSizing:"border-box", WebkitAppearance:"none" };
 
       return (
-        <div style={{position:"fixed", inset:0, background:T.bg, zIndex:100, display:"flex", flexDirection:"column"}}>
-          {/* 헤더: 취소 버튼 + 제목 + 저장 버튼 */}
-          <div style={{
-            background:T.card, borderBottom:`1px solid ${T.border}`,
-            padding:"0 20px",
-            paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`,
-            paddingBottom:12,
-            display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0
-          }}>
-            <button onClick={onCancel} style={{background:"none", border:"none", color:T.textSub, fontSize:15, cursor:"pointer", padding:"8px 0", minWidth:60, minHeight:44, textAlign:"left"}}>← 취소</button>
-            <div style={{fontSize:16, fontWeight:700, color:T.text}}>{editData?"일기 수정":"오늘의 하루"}</div>
-            <button onClick={handleSave} disabled={saving}
-              style={{background:T.accent, color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:14, fontWeight:700, cursor:"pointer", minHeight:44, opacity:saving?0.7:1}}>
-              {saving?"저장 중...":"저장"}
-            </button>
-          </div>
+        <>
+          {/* ✅ [추가] 지도 피커 — 전체화면으로 위에 뜸 */}
+          {showMapPicker && (
+            <NaverMapPicker
+              onSelect={addPlace}
+              onClose={() => setShowMapPicker(false)}
+            />
+          )}
 
-          {/* 스크롤 가능한 본문 영역 */}
-          <div style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:"20px 16px", paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 20px)`}}>
-            <div style={{fontSize:13, color:T.textSub, textAlign:"center", marginBottom:16}}>{fmtFull(today())}</div>
-
-            {/* 오늘의 제목 입력 */}
-            <div style={sec}>
-              <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 제목</div>
-              <input value={title} onChange={e=>setTitle(e.target.value)}
-                placeholder="오늘 하루를 한 문장으로 표현한다면?" style={inp}/>
+          <div style={{position:"fixed", inset:0, background:T.bg, zIndex:100, display:"flex", flexDirection:"column"}}>
+            {/* 헤더 */}
+            <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 20px", paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+              <button onClick={onCancel} style={{background:"none", border:"none", color:T.textSub, fontSize:15, cursor:"pointer", padding:"8px 0", minWidth:60, minHeight:44, textAlign:"left"}}>← 취소</button>
+              <div style={{fontSize:16, fontWeight:700, color:T.text}}>{editData?"일기 수정":"오늘의 하루"}</div>
+              <button onClick={handleSave} disabled={saving} style={{background:T.accent, color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:14, fontWeight:700, cursor:"pointer", minHeight:44, opacity:saving?0.7:1}}>
+                {saving?"저장 중...":"저장"}
+              </button>
             </div>
 
-            {/* 일기 본문 입력 */}
-            <div style={sec}>
-              <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 이야기</div>
-              <textarea value={content} onChange={e=>setContent(e.target.value)}
-                placeholder="오늘 있었던 일을 솔직하게 적어보세요." rows={5}
-                style={{...inp, resize:"none", lineHeight:1.7, fontFamily:"'Noto Sans KR',sans-serif"}}/>
-            </div>
+            {/* 스크롤 본문 */}
+            <div style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:"20px 16px", paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 20px)`}}>
+              <div style={{fontSize:13, color:T.textSub, textAlign:"center", marginBottom:16}}>{fmtFull(today())}</div>
 
-            {/* 감정 / 활동 탭 전환 섹션 */}
-            <div style={sec}>
-              {/* 탭 버튼: 감정 / 활동 */}
-              <div style={{display:"flex", borderBottom:`1px solid ${T.border}`, marginBottom:14}}>
-                {["emotion","activity"].map(t=>(
-                  <button key={t} onClick={()=>setTab(t)}
-                    style={{flex:1, padding:"10px 0", border:"none", background:"none",
-                      fontSize:14, fontWeight:tab===t?700:500,
-                      color:tab===t?T.accent:T.textSub,
-                      borderBottom:`2px solid ${tab===t?T.accent:"transparent"}`,
-                      cursor:"pointer", marginBottom:-1}}>
-                    {t==="emotion"?"감정":"활동"}
-                  </button>
-                ))}
+              {/* 제목 */}
+              <div style={sec}>
+                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 제목</div>
+                <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="오늘 하루를 한 문장으로 표현한다면?" style={inp}/>
               </div>
 
-              {/* 감정 탭: 감정 선택 + 강도 조절 */}
-              {tab==="emotion" && (<>
-                <div style={{fontSize:12, color:T.textSub, marginBottom:10}}>오늘 느낀 감정을 선택해보세요 (최대 5개)</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:14}}>
-                  {EMO_KEYS.map(k=>{
-                    const e=EMOTIONS[k]; const sel=selEmotions.find(x=>x.key===k);
-                    return (
-                      <button key={k} onClick={()=>toggleEmo(k)}
-                        style={{padding:"9px 14px", borderRadius:20,
-                          border:`1.5px solid ${sel?e.color:T.border}`,
-                          background:sel?e.color+"22":T.bg,
-                          fontSize:13, cursor:"pointer",
-                          color:sel?T.text:T.textSub, fontWeight:sel?600:400, minHeight:40}}>
-                        {e.emoji} {e.label}
-                      </button>
-                    );
-                  })}
+              {/* 본문 */}
+              <div style={sec}>
+                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 이야기</div>
+                <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="오늘 있었던 일을 솔직하게 적어보세요." rows={5}
+                  style={{...inp, resize:"none", lineHeight:1.7, fontFamily:"'Noto Sans KR',sans-serif"}}/>
+              </div>
+
+              {/* 감정 / 활동 탭 */}
+              <div style={sec}>
+                <div style={{display:"flex", borderBottom:`1px solid ${T.border}`, marginBottom:14}}>
+                  {["emotion","activity"].map(t=>(
+                    <button key={t} onClick={()=>setTab(t)}
+                      style={{flex:1, padding:"10px 0", border:"none", background:"none", fontSize:14, fontWeight:tab===t?700:500, color:tab===t?T.accent:T.textSub, borderBottom:`2px solid ${tab===t?T.accent:"transparent"}`, cursor:"pointer", marginBottom:-1}}>
+                      {t==="emotion"?"감정":"활동"}
+                    </button>
+                  ))}
                 </div>
-                {/* 선택된 감정들의 강도 조절 슬라이더 */}
-                {selEmotions.length>0 && (
-                  <div style={{display:"flex", flexDirection:"column", gap:12}}>
-                    {selEmotions.map(e=>(
-                      <div key={e.key}>
-                        <div style={{fontSize:13, fontWeight:600, color:T.text, marginBottom:6}}>
-                          {EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label} 강도
+                {tab==="emotion" && (<>
+                  <div style={{fontSize:12, color:T.textSub, marginBottom:10}}>오늘 느낀 감정을 선택해보세요 (최대 5개)</div>
+                  <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:14}}>
+                    {EMO_KEYS.map(k=>{
+                      const e=EMOTIONS[k]; const sel=selEmotions.find(x=>x.key===k);
+                      return (
+                        <button key={k} onClick={()=>toggleEmo(k)}
+                          style={{padding:"9px 14px", borderRadius:20, border:`1.5px solid ${sel?e.color:T.border}`, background:sel?e.color+"22":T.bg, fontSize:13, cursor:"pointer", color:sel?T.text:T.textSub, fontWeight:sel?600:400, minHeight:40}}>
+                          {e.emoji} {e.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selEmotions.length>0 && (
+                    <div style={{display:"flex", flexDirection:"column", gap:12}}>
+                      {selEmotions.map(e=>(
+                        <div key={e.key}>
+                          <div style={{fontSize:13, fontWeight:600, color:T.text, marginBottom:6}}>{EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label} 강도</div>
+                          <div style={{display:"flex", gap:6}}>
+                            {INTENSITY.map((label,i)=>(
+                              <button key={i} onClick={()=>setIntensity(e.key,i+1)}
+                                style={{flex:1, padding:"8px 4px", borderRadius:8, border:`1px solid ${e.intensity===i+1?EMOTIONS[e.key].color:T.border}`, background:e.intensity===i+1?EMOTIONS[e.key].color+"33":"transparent", fontSize:11, color:e.intensity===i+1?T.text:T.textSub, cursor:"pointer", fontWeight:e.intensity===i+1?700:400, minHeight:40}}>
+                                {label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div style={{display:"flex", gap:6}}>
-                          {INTENSITY.map((label,i)=>(
-                            <button key={i} onClick={()=>setIntensity(e.key,i+1)}
-                              style={{flex:1, padding:"8px 4px", borderRadius:8,
-                                border:`1px solid ${e.intensity===i+1?EMOTIONS[e.key].color:T.border}`,
-                                background:e.intensity===i+1?EMOTIONS[e.key].color+"33":"transparent",
-                                fontSize:11, color:e.intensity===i+1?T.text:T.textSub,
-                                cursor:"pointer", fontWeight:e.intensity===i+1?700:400, minHeight:40}}>
-                              {label}
-                            </button>
-                          ))}
+                      ))}
+                    </div>
+                  )}
+                </>)}
+                {tab==="activity" && (
+                  <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
+                    {ACTIVITIES.map(a=>{
+                      const sel=selActivities.includes(a);
+                      return (
+                        <button key={a} onClick={()=>toggleAct(a)}
+                          style={{padding:"9px 14px", borderRadius:20, border:`1.5px solid ${sel?T.accent:T.border}`, background:sel?T.accentBg:T.bg, fontSize:13, cursor:"pointer", color:sel?T.accent:T.textSub, fontWeight:sel?600:400, minHeight:40}}>
+                          {a}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ✅ [변경] 방문 장소 섹션 — 텍스트 입력 → 네이버 지도 피커 버튼 */}
+              <div style={sec}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+                  <div style={{fontSize:13, fontWeight:700, color:T.text}}>📍 오늘 방문한 곳</div>
+                  <button onClick={()=>setShowMapPicker(true)}
+                    style={{ padding:"9px 16px", background:T.accent, color:"#fff", border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", minHeight:36, display:"flex", alignItems:"center", gap:4 }}>
+                    🗺️ 장소 추가
+                  </button>
+                </div>
+
+                {/* 추가된 장소 목록 */}
+                {places.length === 0 ? (
+                  <div style={{textAlign:"center", padding:"16px 0", color:T.textSub, fontSize:13}}>
+                    지도에서 방문한 장소를 추가해보세요
+                  </div>
+                ) : (
+                  <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                    {places.map((p,i)=>(
+                      <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:T.bg, borderRadius:12, border:`1px solid ${T.border}` }}>
+                        <div style={{display:"flex", alignItems:"center", gap:8, overflow:"hidden"}}>
+                          <span style={{fontSize:16, flexShrink:0}}>📍</span>
+                          <div style={{overflow:"hidden"}}>
+                            <div style={{fontSize:14, fontWeight:600, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p.name}</div>
+                            {p.address && <div style={{fontSize:11, color:T.textSub, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p.address}</div>}
+                          </div>
                         </div>
+                        <button onClick={()=>setPlaces(places.filter((_,j)=>j!==i))}
+                          style={{background:"none", border:"none", fontSize:18, color:T.textSub, cursor:"pointer", flexShrink:0, minWidth:36, minHeight:36, display:"flex", alignItems:"center", justifyContent:"center"}}>
+                          ×
+                        </button>
                       </div>
                     ))}
                   </div>
                 )}
-              </>)}
-
-              {/* 활동 탭: 활동 태그 선택 */}
-              {tab==="activity" && (
-                <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
-                  {ACTIVITIES.map(a=>{
-                    const sel=selActivities.includes(a);
-                    return (
-                      <button key={a} onClick={()=>toggleAct(a)}
-                        style={{padding:"9px 14px", borderRadius:20,
-                          border:`1.5px solid ${sel?T.accent:T.border}`,
-                          background:sel?T.accentBg:T.bg,
-                          fontSize:13, cursor:"pointer",
-                          color:sel?T.accent:T.textSub, fontWeight:sel?600:400, minHeight:40}}>
-                        {a}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* 방문 장소 입력 섹션 */}
-            <div style={sec}>
-              <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>오늘 방문한 곳</div>
-              <div style={{display:"flex", gap:8, marginBottom:10}}>
-                <input value={newPlace} onChange={e=>setNewPlace(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&addPlace()}
-                  placeholder="장소 이름" style={{...inp, flex:1}}/>
-                <button onClick={addPlace}
-                  style={{padding:"12px 16px", borderRadius:10, border:"none",
-                    background:T.accent, color:"#fff", fontSize:13, fontWeight:700,
-                    cursor:"pointer", flexShrink:0, minHeight:44}}>
-                  추가
-                </button>
               </div>
-              {/* 추가된 장소 태그 목록 */}
-              <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                {places.map((p,i)=>(
-                  <span key={i} style={{padding:"7px 12px", borderRadius:16,
-                    background:T.accentBg, fontSize:13, color:T.accent, fontWeight:500,
-                    display:"flex", alignItems:"center", gap:4}}>
-                    📍 {p.name}
-                    <button onClick={()=>setPlaces(places.filter((_,j)=>j!==i))}
-                      style={{background:"none", border:"none", cursor:"pointer", fontSize:14,
-                        color:T.textSub, lineHeight:1, padding:"0 2px", minWidth:24, minHeight:24}}>
-                      ×
-                    </button>
-                  </span>
+
+              {/* 지출 */}
+              <div style={sec}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
+                  <div style={{fontSize:13, fontWeight:700, color:T.text}}>오늘의 지출</div>
+                  <button onClick={()=>setPayments([...payments,{store:"",amount:0,category:"기타"}])}
+                    style={{background:T.accentBg, border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, color:T.accent, fontWeight:700, cursor:"pointer", minHeight:36}}>
+                    + 추가
+                  </button>
+                </div>
+                {payments.map((p,i)=>(
+                  <div key={i} style={{display:"flex", gap:8, marginBottom:8, alignItems:"center"}}>
+                    <input value={p.store} onChange={e=>{const n=[...payments];n[i]={...n[i],store:e.target.value};setPayments(n);}} placeholder="가게명" style={{...inp, flex:2, padding:"11px 12px"}}/>
+                    <input type="number" value={p.amount||""} onChange={e=>{const n=[...payments];n[i]={...n[i],amount:Number(e.target.value)};setPayments(n);}} placeholder="금액" style={{...inp, flex:1, padding:"11px 12px"}}/>
+                    <button onClick={()=>setPayments(payments.filter((_,j)=>j!==i))} style={{background:"none", border:"none", cursor:"pointer", fontSize:20, color:T.textSub, minWidth:36, minHeight:44, display:"flex", alignItems:"center", justifyContent:"center"}}>×</button>
+                  </div>
                 ))}
               </div>
             </div>
-
-            {/* 지출 입력 섹션 */}
-            <div style={sec}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text}}>오늘의 지출</div>
-                {/* + 추가 버튼: 새 지출 행 추가 */}
-                <button onClick={()=>setPayments([...payments,{store:"",amount:0,category:"기타"}])}
-                  style={{background:T.accentBg, border:"none", borderRadius:8,
-                    padding:"7px 14px", fontSize:13, color:T.accent, fontWeight:700, cursor:"pointer", minHeight:36}}>
-                  + 추가
-                </button>
-              </div>
-              {/* 지출 행 목록: 가게명 + 금액 + 삭제 */}
-              {payments.map((p,i)=>(
-                <div key={i} style={{display:"flex", gap:8, marginBottom:8, alignItems:"center"}}>
-                  <input value={p.store}
-                    onChange={e=>{const n=[...payments];n[i]={...n[i],store:e.target.value};setPayments(n);}}
-                    placeholder="가게명" style={{...inp, flex:2, padding:"11px 12px"}}/>
-                  <input type="number" value={p.amount||""}
-                    onChange={e=>{const n=[...payments];n[i]={...n[i],amount:Number(e.target.value)};setPayments(n);}}
-                    placeholder="금액" style={{...inp, flex:1, padding:"11px 12px"}}/>
-                  <button onClick={()=>setPayments(payments.filter((_,j)=>j!==i))}
-                    style={{background:"none", border:"none", cursor:"pointer", fontSize:20,
-                      color:T.textSub, minWidth:36, minHeight:44,
-                      display:"flex", alignItems:"center", justifyContent:"center"}}>
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
-        </div>
+        </>
       );
     }
 
     // ========================================================
-    // 📖 DiaryDetail - 일기 상세 보기 화면 (전체화면 오버레이)
-    // - diary: 보여줄 일기 데이터 객체
-    // - onBack: 뒤로가기 버튼 클릭 시 목록으로 돌아가는 함수
-    // - 지도 표시: Google Maps Embed API 사용 (장소가 있을 경우)
+    // 📖 DiaryDetail — 장소 표시 시 address 필드도 보여줌
     // ========================================================
     function DiaryDetail({diary, onBack}) {
       const total = (diary.payments||[]).reduce((s,p)=>s+p.amount,0)||0;
       return (
         <div style={{position:"fixed", inset:0, background:T.bg, zIndex:50, display:"flex", flexDirection:"column"}}>
-          {/* 헤더: 뒤로가기 + 일기 제목 */}
-          <div style={{
-            background:T.card, borderBottom:`1px solid ${T.border}`,
-            padding:"0 20px",
-            paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`,
-            paddingBottom:12,
-            display:"flex", alignItems:"center", gap:10, flexShrink:0
-          }}>
+          <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 20px", paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
             <button onClick={onBack} style={{background:"none", border:"none", color:T.textSub, fontSize:22, cursor:"pointer", minWidth:44, minHeight:44, display:"flex", alignItems:"center"}}>←</button>
             <div style={{flex:1, fontSize:16, fontWeight:700, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{diary.title}</div>
           </div>
-
-          {/* 스크롤 가능한 상세 내용 */}
           <div style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:"20px 16px", paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 20px)`}}>
             <div style={{fontSize:13, color:T.textSub, marginBottom:4}}>{fmtFull(diary.date)}</div>
-
-            {/* 본문 */}
             <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
               <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 이야기</div>
               <div style={{fontSize:14, color:T.text, lineHeight:1.8, whiteSpace:"pre-line"}}>{diary.content}</div>
             </div>
-
-            {/* 감정 섹션: 감정별 막대 그래프 */}
             <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
               <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:12}}>감정</div>
               {(diary.emotions||[]).map(e=>(
                 <div key={e.key} style={{marginBottom:10}}>
-                  <div style={{fontSize:13, fontWeight:600, marginBottom:5, color:T.text}}>
-                    {EMOTIONS[e.key]?.emoji} {EMOTIONS[e.key]?.label}
-                  </div>
-                  {/* 강도 시각화 바 (intensity * 25 = 최대 100%) */}
+                  <div style={{fontSize:13, fontWeight:600, marginBottom:5, color:T.text}}>{EMOTIONS[e.key]?.emoji} {EMOTIONS[e.key]?.label}</div>
                   <div style={{height:7, borderRadius:4, background:T.border}}>
                     <div style={{height:"100%", borderRadius:4, background:EMOTIONS[e.key]?.color, width:`${e.intensity*25}%`}}/>
                   </div>
                 </div>
               ))}
             </div>
-
-            {/* 활동 섹션 (활동이 있을 때만 표시) */}
             {(diary.activities||[]).length>0 && (
               <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
                 <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>활동</div>
@@ -740,43 +612,29 @@
                 </div>
               </div>
             )}
-
-            {/* 장소 섹션: 장소 태그 + Google Maps 지도 (장소가 있을 때만 표시) */}
+            {/* ✅ 장소 섹션 — address + 구글 지도 표시 */}
             {(diary.places||[]).length>0 && (
               <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
                 <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>방문 장소</div>
                 {diary.places.map((p,i)=>(
                   <div key={i} style={{marginBottom:16}}>
-                    <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:8}}>
-                      <span style={{fontSize:15}}>📍</span>
-                      <span style={{fontSize:14, color:T.text, fontWeight:500}}>{p.name}</span>
-                      {p.isFirst && <span style={{padding:"2px 8px", borderRadius:8, background:"#E8F5E9", color:"#4CAF50", fontSize:10, fontWeight:700}}>첫 방문</span>}
+                    <div style={{display:"flex", alignItems:"flex-start", gap:8, marginBottom:8}}>
+                      <span style={{fontSize:16, marginTop:1}}>📍</span>
+                      <div>
+                        <div style={{fontSize:14, color:T.text, fontWeight:600}}>{p.name}</div>
+                        {p.address && <div style={{fontSize:12, color:T.textSub, marginTop:2}}>{p.address}</div>}
+                      </div>
+                      {p.isFirst && <span style={{padding:"2px 8px", borderRadius:8, background:"#E8F5E9", color:"#4CAF50", fontSize:10, fontWeight:700, flexShrink:0}}>첫 방문</span>}
                     </div>
-                    {/* Google Maps API 키가 있으면 지도 표시, 없으면 안내 문구 */}
-                    {GOOGLE_MAPS_KEY !== 'YOUR_API_KEY_HERE' ? (
-                      <div style={{borderRadius:12, overflow:"hidden", border:`1px solid ${T.border}`}}>
-                        <iframe
-                          title={p.name}
-                          width="100%"
-                          height="200"
-                          style={{border:"none", display:"block"}}
-                          loading="lazy"
-                          allowFullScreen
-                          src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${encodeURIComponent(p.name)}&language=ko`}
-                        />
-                      </div>
-                    ) : (
-                      <div style={{borderRadius:12, background:T.bg, border:`1px dashed ${T.border}`,
-                        height:80, display:"flex", alignItems:"center", justifyContent:"center"}}>
-                        <span style={{fontSize:12, color:T.textMuted}}>🗺 API 키를 입력하면 지도가 표시돼요</span>
-                      </div>
-                    )}
+                    <div style={{borderRadius:12, overflow:"hidden", border:`1px solid ${T.border}`}}>
+                      <iframe title={p.name} width="100%" height="200"
+                        style={{border:"none", display:"block"}} loading="lazy" allowFullScreen
+                        src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${encodeURIComponent(p.name+(p.address?" "+p.address:""))}&language=ko`}/>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-
-            {/* 지출 섹션: 합계 + 항목별 내역 (지출이 있을 때만 표시) */}
             {(diary.payments||[]).length>0 && (
               <div style={{background:T.card, borderRadius:16, padding:20, boxShadow:T.shadow}}>
                 <div style={{display:"flex", justifyContent:"space-between", marginBottom:12}}>
@@ -784,8 +642,7 @@
                   <span style={{fontSize:14, fontWeight:800, color:T.accent}}>{money(total)}</span>
                 </div>
                 {diary.payments.map((p,i)=>(
-                  <div key={i} style={{display:"flex", justifyContent:"space-between",
-                    padding:"10px 12px", background:T.bg, borderRadius:10, marginBottom:8, border:`1px solid ${T.border}`}}>
+                  <div key={i} style={{display:"flex", justifyContent:"space-between", padding:"10px 12px", background:T.bg, borderRadius:10, marginBottom:8, border:`1px solid ${T.border}`}}>
                     <div>
                       <div style={{fontSize:14, fontWeight:600, color:T.text}}>{p.store}</div>
                       <div style={{fontSize:11, color:T.textSub, marginTop:1}}>{p.category}</div>
@@ -800,497 +657,198 @@
       );
     }
 
-    // ========================================================
-    // 🤖 AIChatModal - AI 대화 분석 모달 (하단에서 올라오는 시트)
-    // - 일기 데이터를 기반으로 감정/지출/장소 패턴을 분석해서 답변
-    // - 현재는 키워드 기반 간단 분석 (실제 AI API 연결 전 단계)
-    // - msgs : 대화 메시지 목록 [{role:"ai"|"user", text:"..."}]
-    // - analyze(): 질문 내용을 보고 어떤 분석을 할지 판단하는 함수
-    // ========================================================
     function AIChatModal({onClose, diaries}) {
       const [msgs, setMsgs] = useState([{role:"ai", text:"안녕하세요! GYEOL AI예요 ☕\n\n기록된 일기를 바탕으로 당신의 결을 함께 들여다볼게요.\n\n이런 걸 물어볼 수 있어요:\n• \"내 감정 패턴이 어때?\"\n• \"어디에 돈을 많이 썼어?\"\n• \"자주 방문한 곳은 어디야?\""}]);
-      const [input, setInput] = useState("");
-      const [loading, setLoading] = useState(false);
+      const [input, setInput] = useState(""); const [loading, setLoading] = useState(false);
       const ref = useRef(null);
-      // 새 메시지가 추가될 때마다 스크롤을 맨 아래로
       useEffect(()=>{ref.current?.scrollTo(0, ref.current.scrollHeight);},[msgs]);
-
-      // 키워드 기반 분석 함수: 질문에 따라 다른 통계를 계산해서 반환
       const analyze = q => {
         const l = q.toLowerCase();
-        if (l.includes("돈")||l.includes("지출")||l.includes("썼")) {
-          const tot = diaries.reduce((s,d)=>s+(d.payments?.reduce((a,p)=>a+p.amount,0)||0),0);
-          return `💰 총 지출: ${money(tot)}\n\n외식과 카페 방문 시 지출이 큰 편이에요. 관계와 공간에 투자하는 결이 보여요.`;
-        }
-        if (l.includes("방문")||l.includes("장소")) {
-          const pc = {}; diaries.forEach(d=>(d.places||[]).forEach(p=>{pc[p.name]=(pc[p.name]||0)+1;}));
-          const s = Object.entries(pc).sort((a,b)=>b[1]-a[1]).slice(0,5);
-          return s.length===0?"아직 장소 기록이 없어요.":`📍 자주 찾는 곳 TOP 5:\n${s.map(([p,c],i)=>`${i+1}. ${p} (${c}회)`).join("\n")}\n\n공간의 취향도 결의 일부예요.`;
-        }
-        if (l.includes("감정")||l.includes("기분")||l.includes("패턴")) {
-          const ec = {}; diaries.forEach(d=>(d.emotions||[]).forEach(e=>{ec[e.key]=(ec[e.key]||0)+1;}));
-          const s = Object.entries(ec).sort((a,b)=>b[1]-a[1]);
-          return s.length===0?"아직 감정 기록이 없어요.":`🎭 감정 패턴:\n${s.map(([e,c],i)=>`${i+1}. ${EMOTIONS[e]?.emoji} ${EMOTIONS[e]?.label} (${c}회)`).join("\n")}\n\n긍정적인 감정이 우세한 결이에요.`;
-        }
+        if (l.includes("돈")||l.includes("지출")||l.includes("썼")) { const tot = diaries.reduce((s,d)=>s+(d.payments?.reduce((a,p)=>a+p.amount,0)||0),0); return `💰 총 지출: ${money(tot)}\n\n외식과 카페 방문 시 지출이 큰 편이에요. 관계와 공간에 투자하는 결이 보여요.`; }
+        if (l.includes("방문")||l.includes("장소")) { const pc = {}; diaries.forEach(d=>(d.places||[]).forEach(p=>{pc[p.name]=(pc[p.name]||0)+1;})); const s = Object.entries(pc).sort((a,b)=>b[1]-a[1]).slice(0,5); return s.length===0?"아직 장소 기록이 없어요.":`📍 자주 찾는 곳 TOP 5:\n${s.map(([p,c],i)=>`${i+1}. ${p} (${c}회)`).join("\n")}\n\n공간의 취향도 결의 일부예요.`; }
+        if (l.includes("감정")||l.includes("기분")||l.includes("패턴")) { const ec = {}; diaries.forEach(d=>(d.emotions||[]).forEach(e=>{ec[e.key]=(ec[e.key]||0)+1;})); const s = Object.entries(ec).sort((a,b)=>b[1]-a[1]); return s.length===0?"아직 감정 기록이 없어요.":`🎭 감정 패턴:\n${s.map(([e,c],i)=>`${i+1}. ${EMOTIONS[e]?.emoji} ${EMOTIONS[e]?.label} (${c}회)`).join("\n")}\n\n긍정적인 감정이 우세한 결이에요.`; }
         return "지출, 장소, 감정 패턴 등을 물어보세요. 기록이 쌓일수록 더 깊이 분석할 수 있어요 ☕";
       };
-
-      // 메시지 전송: 유저 메시지 추가 → 0.9초 후 AI 답변 추가
       const send = () => {
         if (!input.trim()||loading) return;
         const q = input; setInput(""); setMsgs(p=>[...p,{role:"user",text:q}]); setLoading(true);
         setTimeout(()=>{setMsgs(p=>[...p,{role:"ai",text:analyze(q)}]);setLoading(false);}, 900);
       };
-
       return (
-        // 배경 어둡게 + 클릭하면 닫힘
-        <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.6)", zIndex:200,
-          display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={onClose}>
-          <div onClick={e=>e.stopPropagation()} style={{
-            background:T.card, borderRadius:"20px 20px 0 0",
-            display:"flex", flexDirection:"column", maxHeight:"80vh",
-            boxShadow:"0 -8px 40px rgba(0,0,0,0.15)",
-            paddingBottom:`env(safe-area-inset-bottom,0px)`
-          }}>
-            {/* 모달 헤더 */}
-            <div style={{padding:"16px 20px", borderBottom:`1px solid ${T.border}`,
-              display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0}}>
-              <div style={{display:"flex", alignItems:"center", gap:8}}>
-                <span style={{fontSize:18}}>☕</span>
-                <span style={{fontSize:16, fontWeight:700, color:T.text}}>나의 결 분석</span>
-              </div>
-              <button onClick={onClose} style={{background:"none", border:"none", fontSize:22,
-                cursor:"pointer", color:T.textSub, minWidth:44, minHeight:44,
-                display:"flex", alignItems:"center", justifyContent:"center"}}>×</button>
+        <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.6)", zIndex:200, display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={onClose}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:T.card, borderRadius:"20px 20px 0 0", display:"flex", flexDirection:"column", maxHeight:"80vh", boxShadow:"0 -8px 40px rgba(0,0,0,0.15)", paddingBottom:`env(safe-area-inset-bottom,0px)` }}>
+            <div style={{padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0}}>
+              <div style={{display:"flex", alignItems:"center", gap:8}}><span style={{fontSize:18}}>☕</span><span style={{fontSize:16, fontWeight:700, color:T.text}}>나의 결 분석</span></div>
+              <button onClick={onClose} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:T.textSub, minWidth:44, minHeight:44, display:"flex", alignItems:"center", justifyContent:"center"}}>×</button>
             </div>
-
-            {/* 대화 메시지 영역 */}
             <div ref={ref} style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:16, minHeight:200}}>
               {msgs.map((m,i)=>(
                 <div key={i} style={{display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start", marginBottom:10}}>
-                  <div style={{maxWidth:"82%", padding:"11px 15px", borderRadius:16,
-                    background:m.role==="user"?T.accent:T.bg,
-                    color:m.role==="user"?"#fff":T.text,
-                    fontSize:14, lineHeight:1.6, whiteSpace:"pre-line"}}>
-                    {m.text}
-                  </div>
+                  <div style={{maxWidth:"82%", padding:"11px 15px", borderRadius:16, background:m.role==="user"?T.accent:T.bg, color:m.role==="user"?"#fff":T.text, fontSize:14, lineHeight:1.6, whiteSpace:"pre-line"}}>{m.text}</div>
                 </div>
               ))}
-              {loading && (
-                <div style={{display:"flex"}}>
-                  <div style={{background:T.bg, padding:"11px 15px", borderRadius:16, fontSize:14, color:T.textSub}}>분석 중... ☕</div>
-                </div>
-              )}
+              {loading && <div style={{display:"flex"}}><div style={{background:T.bg, padding:"11px 15px", borderRadius:16, fontSize:14, color:T.textSub}}>분석 중... ☕</div></div>}
             </div>
-
-            {/* 메시지 입력창 + 전송 버튼 */}
             <div style={{padding:"10px 14px", borderTop:`1px solid ${T.border}`, display:"flex", gap:8, flexShrink:0}}>
-              <input value={input} onChange={e=>setInput(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&send()}
-                placeholder="나의 결에 대해 물어보세요..."
-                style={{flex:1, padding:"12px 16px", borderRadius:22, border:`1px solid ${T.border}`,
-                  background:T.bg, fontSize:15, outline:"none", color:T.text}}/>
-              <button onClick={send}
-                style={{width:44, height:44, borderRadius:"50%", border:"none",
-                  background:input.trim()?T.accent:T.border, color:"#fff",
-                  cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
-                ↑
-              </button>
+              <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="나의 결에 대해 물어보세요..." style={{flex:1, padding:"12px 16px", borderRadius:22, border:`1px solid ${T.border}`, background:T.bg, fontSize:15, outline:"none", color:T.text}}/>
+              <button onClick={send} style={{width:44, height:44, borderRadius:"50%", border:"none", background:input.trim()?T.accent:T.border, color:"#fff", cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>↑</button>
             </div>
           </div>
         </div>
       );
     }
 
-    // ========================================================
-    // 📊 StatsTab - 나의 결 (통계) 탭 화면
-    // - subTab으로 "전체 / 감정 / 활동" 필터 전환
-    // - 감정 통계: 모든 일기의 감정 강도 합산 → 카드 + 막대그래프
-    // - 활동 통계: 모든 일기의 활동 태그 등장 횟수 → 카드 + 막대그래프
-    // - 일기가 0개면 빈 상태 안내 화면 표시
-    // ========================================================
     function StatsTab({diaries}) {
       const [subTab, setSubTab] = useState("all");
-
-      // 모든 일기에서 감정별 강도 합산
-      const allEmo = {};
-      diaries.forEach(d=>(d.emotions||[]).forEach(e=>{allEmo[e.key]=(allEmo[e.key]||0)+e.intensity;}));
-      const emoSorted = Object.entries(allEmo).sort((a,b)=>b[1]-a[1]);
-      const maxEmo = emoSorted[0]?.[1]||1;
-
-      // 모든 일기에서 활동별 등장 횟수 합산
-      const allAct = {};
-      diaries.forEach(d=>(d.activities||[]).forEach(a=>{allAct[a]=(allAct[a]||0)+1;}));
-      const actSorted = Object.entries(allAct).sort((a,b)=>b[1]-a[1]);
-      const maxAct = actSorted[0]?.[1]||1;
-
-      // 일기가 없을 때 빈 화면
-      if (diaries.length===0) return (
-        <div style={{padding:"80px 20px", textAlign:"center"}}>
-          <div style={{fontSize:48, marginBottom:16}}>✨</div>
-          <div style={{fontSize:16, fontWeight:700, color:T.text, marginBottom:8}}>아직 기록이 없어요</div>
-          <div style={{fontSize:14, color:T.textSub, lineHeight:1.7}}>일기를 쓰기 시작하면<br/>나의 결이 보이기 시작해요.</div>
-        </div>
-      );
-
+      const allEmo = {}; diaries.forEach(d=>(d.emotions||[]).forEach(e=>{allEmo[e.key]=(allEmo[e.key]||0)+e.intensity;}));
+      const emoSorted = Object.entries(allEmo).sort((a,b)=>b[1]-a[1]); const maxEmo = emoSorted[0]?.[1]||1;
+      const allAct = {}; diaries.forEach(d=>(d.activities||[]).forEach(a=>{allAct[a]=(allAct[a]||0)+1;}));
+      const actSorted = Object.entries(allAct).sort((a,b)=>b[1]-a[1]); const maxAct = actSorted[0]?.[1]||1;
+      if (diaries.length===0) return (<div style={{padding:"80px 20px", textAlign:"center"}}><div style={{fontSize:48, marginBottom:16}}>✨</div><div style={{fontSize:16, fontWeight:700, color:T.text, marginBottom:8}}>아직 기록이 없어요</div><div style={{fontSize:14, color:T.textSub, lineHeight:1.7}}>일기를 쓰기 시작하면<br/>나의 결이 보이기 시작해요.</div></div>);
       return (
         <div style={{padding:"20px 16px", paddingBottom:20}}>
           <div style={{fontSize:20, fontWeight:800, color:T.text, marginBottom:4}}>나의 결</div>
           <div style={{fontSize:13, color:T.textSub, marginBottom:14}}>기록이 쌓일수록 결이 선명해집니다</div>
-
-          {/* 서브탭 필터 버튼 */}
           <div style={{display:"flex", gap:8, marginBottom:16, overflowX:"auto", paddingBottom:4}}>
             {[["all","전체"],["emotion","감정"],["activity","활동"]].map(([id,label])=>(
-              <button key={id} onClick={()=>setSubTab(id)}
-                style={{padding:"9px 18px", borderRadius:20,
-                  border:`1.5px solid ${subTab===id?T.accent:T.border}`,
-                  background:subTab===id?T.accentBg:T.card,
-                  color:subTab===id?T.accent:T.textSub,
-                  fontSize:13, fontWeight:subTab===id?700:500,
-                  cursor:"pointer", whiteSpace:"nowrap", minHeight:40, flexShrink:0}}>
-                {label}
-              </button>
+              <button key={id} onClick={()=>setSubTab(id)} style={{padding:"9px 18px", borderRadius:20, border:`1.5px solid ${subTab===id?T.accent:T.border}`, background:subTab===id?T.accentBg:T.card, color:subTab===id?T.accent:T.textSub, fontSize:13, fontWeight:subTab===id?700:500, cursor:"pointer", whiteSpace:"nowrap", minHeight:40, flexShrink:0}}>{label}</button>
             ))}
           </div>
-
-          {/* 감정 통계 카드 (전체 또는 감정 탭에서 표시) */}
           {(subTab==="all"||subTab==="emotion") && emoSorted.length>0 && (
             <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
               <div style={{fontSize:14, fontWeight:700, color:T.text, marginBottom:14}}>🎭 감정의 결</div>
-              {/* 감정 카드 그리드 */}
               <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:subTab==="emotion"?16:0}}>
-                {emoSorted.map(([k,v])=>{
-                  const e=EMOTIONS[k]; if(!e) return null;
-                  return (
-                    <div key={k} style={{padding:"10px 14px", borderRadius:12,
-                      background:e.color+"22", textAlign:"center", border:`1px solid ${e.color}44`}}>
-                      <div style={{fontSize:20}}>{e.emoji}</div>
-                      <div style={{fontSize:11, fontWeight:600, color:T.text, marginTop:3}}>{e.label}</div>
-                      <div style={{fontSize:10, color:T.textSub}}>{v}점</div>
-                    </div>
-                  );
-                })}
+                {emoSorted.map(([k,v])=>{const e=EMOTIONS[k]; if(!e) return null; return (<div key={k} style={{padding:"10px 14px", borderRadius:12, background:e.color+"22", textAlign:"center", border:`1px solid ${e.color}44`}}><div style={{fontSize:20}}>{e.emoji}</div><div style={{fontSize:11, fontWeight:600, color:T.text, marginTop:3}}>{e.label}</div><div style={{fontSize:10, color:T.textSub}}>{v}점</div></div>);})}
               </div>
-              {/* 감정 탭에서만 막대그래프 추가 표시 */}
-              {subTab==="emotion" && emoSorted.map(([k,v],i)=>{
-                const e=EMOTIONS[k]; if(!e) return null;
-                return (
-                  <div key={k} style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}>
-                    <span style={{fontSize:12, fontWeight:700, color:T.textSub, minWidth:18}}>{i+1}</span>
-                    <span style={{fontSize:16}}>{e.emoji}</span>
-                    <span style={{fontSize:13, fontWeight:600, color:T.text, minWidth:50}}>{e.label}</span>
-                    <div style={{flex:1, height:8, borderRadius:4, background:T.border}}>
-                      <div style={{height:"100%", borderRadius:4, background:e.color, width:`${(v/maxEmo)*100}%`}}/>
-                    </div>
-                    <span style={{fontSize:12, color:T.textSub, minWidth:28, textAlign:"right"}}>{v}점</span>
-                  </div>
-                );
-              })}
+              {subTab==="emotion" && emoSorted.map(([k,v],i)=>{const e=EMOTIONS[k]; if(!e) return null; return (<div key={k} style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}><span style={{fontSize:12, fontWeight:700, color:T.textSub, minWidth:18}}>{i+1}</span><span style={{fontSize:16}}>{e.emoji}</span><span style={{fontSize:13, fontWeight:600, color:T.text, minWidth:50}}>{e.label}</span><div style={{flex:1, height:8, borderRadius:4, background:T.border}}><div style={{height:"100%", borderRadius:4, background:e.color, width:`${(v/maxEmo)*100}%`}}/></div><span style={{fontSize:12, color:T.textSub, minWidth:28, textAlign:"right"}}>{v}점</span></div>);})}
             </div>
           )}
-
-          {/* 활동 통계 카드 (전체 또는 활동 탭에서 표시) */}
           {(subTab==="all"||subTab==="activity") && actSorted.length>0 && (
             <div style={{background:T.card, borderRadius:16, padding:20, boxShadow:T.shadow}}>
               <div style={{fontSize:14, fontWeight:700, color:T.text, marginBottom:12}}>🏃 활동의 결</div>
-              {/* 활동 태그 목록 */}
               <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:subTab==="activity"?16:0}}>
-                {actSorted.map(([a,c])=>(
-                  <div key={a} style={{padding:"9px 14px", borderRadius:14, background:T.accentBg,
-                    display:"flex", alignItems:"center", gap:6, border:`1px solid ${T.accentLight}`}}>
-                    <span style={{fontSize:13, fontWeight:600, color:T.text}}>{a}</span>
-                    <span style={{fontSize:12, fontWeight:700, color:T.accent, background:T.card, padding:"1px 7px", borderRadius:8}}>{c}회</span>
-                  </div>
-                ))}
+                {actSorted.map(([a,c])=>(<div key={a} style={{padding:"9px 14px", borderRadius:14, background:T.accentBg, display:"flex", alignItems:"center", gap:6, border:`1px solid ${T.accentLight}`}}><span style={{fontSize:13, fontWeight:600, color:T.text}}>{a}</span><span style={{fontSize:12, fontWeight:700, color:T.accent, background:T.card, padding:"1px 7px", borderRadius:8}}>{c}회</span></div>))}
               </div>
-              {/* 활동 탭에서만 막대그래프 추가 표시 */}
-              {subTab==="activity" && actSorted.map(([a,c],i)=>(
-                <div key={a} style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}>
-                  <span style={{fontSize:12, fontWeight:700, color:T.textSub, minWidth:18}}>{i+1}</span>
-                  <span style={{fontSize:13, fontWeight:600, color:T.text, flex:1}}>{a}</span>
-                  <div style={{width:100, height:8, borderRadius:4, background:T.border}}>
-                    <div style={{height:"100%", borderRadius:4, background:T.accent, width:`${(c/maxAct)*100}%`}}/>
-                  </div>
-                  <span style={{fontSize:12, color:T.textSub, minWidth:28, textAlign:"right"}}>{c}회</span>
-                </div>
-              ))}
+              {subTab==="activity" && actSorted.map(([a,c],i)=>(<div key={a} style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}><span style={{fontSize:12, fontWeight:700, color:T.textSub, minWidth:18}}>{i+1}</span><span style={{fontSize:13, fontWeight:600, color:T.text, flex:1}}>{a}</span><div style={{width:100, height:8, borderRadius:4, background:T.border}}><div style={{height:"100%", borderRadius:4, background:T.accent, width:`${(c/maxAct)*100}%`}}/></div><span style={{fontSize:12, color:T.textSub, minWidth:28, textAlign:"right"}}>{c}회</span></div>))}
             </div>
           )}
         </div>
       );
     }
 
-    // ========================================================
-    // 👤 MyPage - 마이페이지 탭 화면
-    // - 유저 프로필 (이름, 이메일, 아바타)
-    // - 요약 통계 3개: 총 기록 수 / 연속 기록 / 총 지출
-    // - 로그아웃 버튼
-    // ========================================================
     function MyPage({diaries, streak}) {
       const {user, logout} = useAuth();
       const total = diaries.reduce((s,d)=>s+(d.payments?.reduce((a,p)=>a+p.amount,0)||0),0);
       const [loggingOut, setLoggingOut] = useState(false);
       const handleLogout = async () => { setLoggingOut(true); await logout(); };
-
       return (
         <div style={{padding:"20px 16px", paddingBottom:20}}>
           <div style={{fontSize:20, fontWeight:800, color:T.text, marginBottom:16}}>마이페이지</div>
-
-          {/* 프로필 카드: 아바타(이름 첫 글자) + 통계 3개 */}
           <div style={{background:T.card, borderRadius:16, padding:24, marginBottom:12, boxShadow:T.shadow}}>
             <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:20}}>
-              {/* 아바타: 이름 첫 글자를 원형으로 표시 */}
-              <div style={{width:56, height:56, borderRadius:"50%", background:T.accentBg,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:24, fontWeight:700, color:T.accent, flexShrink:0}}>
-                {user?.name?.[0]||"?"}
-              </div>
-              <div>
-                <div style={{fontSize:17, fontWeight:700, color:T.text}}>{user?.name}</div>
-                <div style={{fontSize:13, color:T.textSub}}>{user?.email}</div>
-              </div>
+              <div style={{width:56, height:56, borderRadius:"50%", background:T.accentBg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, fontWeight:700, color:T.accent, flexShrink:0}}>{user?.name?.[0]||"?"}</div>
+              <div><div style={{fontSize:17, fontWeight:700, color:T.text}}>{user?.name}</div><div style={{fontSize:13, color:T.textSub}}>{user?.email}</div></div>
             </div>
-            {/* 통계 3칸 그리드 */}
             <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10}}>
-              <div style={{textAlign:"center", padding:14, background:T.bg, borderRadius:12}}>
-                <div style={{fontSize:20, fontWeight:800, color:T.accent}}>{diaries.length}</div>
-                <div style={{fontSize:11, color:T.textSub, marginTop:2}}>기록한 하루</div>
-              </div>
-              <div style={{textAlign:"center", padding:14, background:T.bg, borderRadius:12}}>
-                <div style={{fontSize:20, fontWeight:800, color:T.accent}}>{streak}</div>
-                <div style={{fontSize:11, color:T.textSub, marginTop:2}}>연속 기록</div>
-              </div>
-              <div style={{textAlign:"center", padding:14, background:T.bg, borderRadius:12}}>
-                <div style={{fontSize:16, fontWeight:800, color:T.accent}}>{total>0?(total/10000).toFixed(0)+"만":"0"}</div>
-                <div style={{fontSize:11, color:T.textSub, marginTop:2}}>총 지출</div>
-              </div>
+              <div style={{textAlign:"center", padding:14, background:T.bg, borderRadius:12}}><div style={{fontSize:20, fontWeight:800, color:T.accent}}>{diaries.length}</div><div style={{fontSize:11, color:T.textSub, marginTop:2}}>기록한 하루</div></div>
+              <div style={{textAlign:"center", padding:14, background:T.bg, borderRadius:12}}><div style={{fontSize:20, fontWeight:800, color:T.accent}}>{streak}</div><div style={{fontSize:11, color:T.textSub, marginTop:2}}>연속 기록</div></div>
+              <div style={{textAlign:"center", padding:14, background:T.bg, borderRadius:12}}><div style={{fontSize:16, fontWeight:800, color:T.accent}}>{total>0?(total/10000).toFixed(0)+"만":"0"}</div><div style={{fontSize:11, color:T.textSub, marginTop:2}}>총 지출</div></div>
             </div>
           </div>
-
-          {/* 로그아웃 버튼 */}
-          <button onClick={handleLogout} disabled={loggingOut}
-            style={{width:"100%", padding:15, borderRadius:12, border:`1px solid ${T.danger}`,
-              background:"transparent", color:T.danger, fontSize:15, fontWeight:600,
-              cursor:"pointer", minHeight:52, opacity:loggingOut?0.7:1}}>
-            {loggingOut?"로그아웃 중...":"로그아웃"}
-          </button>
+          <button onClick={handleLogout} disabled={loggingOut} style={{width:"100%", padding:15, borderRadius:12, border:`1px solid ${T.danger}`, background:"transparent", color:T.danger, fontSize:15, fontWeight:600, cursor:"pointer", minHeight:52, opacity:loggingOut?0.7:1}}>{loggingOut?"로그아웃 중...":"로그아웃"}</button>
         </div>
       );
     }
 
-    // ========================================================
-    // 🏠 MainApp - 로그인 후 메인 앱 화면
-    // - 하단 탭 4개: 일기 / 연대(커뮤니티) / 나의 결(통계) / 마이
-    // - DB에서 일기 데이터를 불러와 diaries 상태로 관리
-    // - writing: 일기 작성 화면 표시 여부
-    // - selected: 현재 상세 보기 중인 일기 (null이면 목록 표시)
-    // - showAI: AI 분석 모달 표시 여부
-    // - showFilter: 날짜 필터 모달 표시 여부
-    // - streak: 오늘을 포함해 연속으로 기록한 일수 계산
-    // ========================================================
     function MainApp() {
       const {user} = useAuth();
-      const [diaries, setDiaries] = useState([]);      // DB에서 불러온 일기 목록
-      const [dbLoading, setDbLoading] = useState(true); // 초기 데이터 로딩 중 여부
-      const [mainTab, setMainTab] = useState("diary");  // 현재 선택된 하단 탭
-      const [selected, setSelected] = useState(null);   // 상세 보기 중인 일기
-      const [writing, setWriting] = useState(false);    // 일기 작성 화면 표시 여부
-      const [showAI, setShowAI] = useState(false);      // AI 분석 모달 표시 여부
-      const [showFilter, setShowFilter] = useState(false); // 날짜 필터 모달
-      const [sd, setSd] = useState("");                 // 필터 시작 날짜
-      const [ed, setEd] = useState("");                 // 필터 끝 날짜
-      const [savedToast, setSavedToast] = useState(false);    // 저장 완료 토스트 표시
-      const [showEditConfirm, setShowEditConfirm] = useState(false); // 오늘 일기 수정 확인 모달
+      const [diaries, setDiaries] = useState([]);
+      const [dbLoading, setDbLoading] = useState(true);
+      const [mainTab, setMainTab] = useState("diary");
+      const [selected, setSelected] = useState(null);
+      const [writing, setWriting] = useState(false);
+      const [showAI, setShowAI] = useState(false);
+      const [showFilter, setShowFilter] = useState(false);
+      const [sd, setSd] = useState(""); const [ed, setEd] = useState("");
+      const [savedToast, setSavedToast] = useState(false);
+      const [showEditConfirm, setShowEditConfirm] = useState(false);
 
-      // Supabase에서 내 일기 목록 불러오기 (날짜 내림차순)
       const loadDiaries = useCallback(async () => {
         setDbLoading(true);
-        const { data, error } = await sb
-          .from('diary_entries')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('date', { ascending: false });
+        const { data, error } = await sb.from('diary_entries').select('*').eq('user_id', user.id).order('date', { ascending: false });
         if (data) setDiaries(data);
         if (error) console.error('일기 로드 오류:', error);
         setDbLoading(false);
       }, [user]);
 
-      // 컴포넌트 처음 마운트 시 일기 불러오기
       useEffect(() => { if (user) loadDiaries(); }, [user]);
 
-      // 오늘 일기 작성 여부
       const todayWritten = diaries.some(d=>d.date===today());
-
-      // 연속 기록 일수 계산
-      // - 오늘 기록했으면 오늘부터, 아니면 어제부터 거슬러 올라감
       const streak = (() => {
         let s=0; const d=new Date(); const start=todayWritten?0:1;
-        for(let i=start;i<365;i++){
-          const ds=new Date(d); ds.setDate(ds.getDate()-i);
-          const key=ds.toISOString().slice(0,10);
-          if(diaries.some(x=>x.date===key)) s++; else break;
-        }
+        for(let i=start;i<365;i++){const ds=new Date(d); ds.setDate(ds.getDate()-i); const key=ds.toISOString().slice(0,10); if(diaries.some(x=>x.date===key)) s++; else break;}
         return s;
       })();
+      const filtered = diaries.filter(d=>{if(sd&&d.date<sd) return false; if(ed&&d.date>ed) return false; return true;});
 
-      // 날짜 필터 적용된 일기 목록
-      const filtered = diaries.filter(d=>{
-        if(sd&&d.date<sd) return false;
-        if(ed&&d.date>ed) return false;
-        return true;
-      });
-
-      // 일기 저장 처리: 오늘 일기가 있으면 수정(update), 없으면 신규 생성(insert)
       const handleSaveDiary = async (data) => {
         const existing = diaries.find(d=>d.date===today());
         if (existing) {
-          // 기존 일기 수정
           const { error } = await sb.from('diary_entries').update(data).eq('id', existing.id);
           if (!error) setDiaries(diaries.map(d=>d.date===today()?{...d,...data}:d));
           else { console.error(error); alert("저장 중 오류가 발생했습니다."); return; }
         } else {
-          // 새 일기 생성
-          const { data: newEntry, error } = await sb
-            .from('diary_entries')
-            .insert({ ...data, user_id: user.id })
-            .select()
-            .single();
+          const { data: newEntry, error } = await sb.from('diary_entries').insert({ ...data, user_id: user.id }).select().single();
           if (newEntry) setDiaries([newEntry, ...diaries]);
           else { console.error(error); alert("저장 중 오류가 발생했습니다."); return; }
         }
         setWriting(false);
-        // 저장 완료 토스트 2.2초 표시
-        setSavedToast(true);
-        setTimeout(()=>setSavedToast(false), 2200);
+        setSavedToast(true); setTimeout(()=>setSavedToast(false), 2200);
       };
 
-      // 하단 탭 정의
-      const tabs = [
-        {id:"diary", label:"일기", icon:"📝"},
-        {id:"community", label:"연대", icon:"🔗"},
-        {id:"stats", label:"나의 결", icon:"✨"},
-        {id:"mypage", label:"마이", icon:"👤"},
-      ];
+      const tabs = [{id:"diary",label:"일기",icon:"📝"},{id:"community",label:"연대",icon:"🔗"},{id:"stats",label:"나의 결",icon:"✨"},{id:"mypage",label:"마이",icon:"👤"}];
 
-      // 일기 작성 화면: 전체 화면 오버레이로 표시
-      if (writing) return (
-        <DiaryWritePage
-          onSave={handleSaveDiary}
-          onCancel={()=>setWriting(false)}
-          editData={todayWritten?diaries.find(d=>d.date===today()):null}
-        />
-      );
-      // 일기 상세 화면: 전체 화면 오버레이로 표시
+      if (writing) return (<DiaryWritePage onSave={handleSaveDiary} onCancel={()=>setWriting(false)} editData={todayWritten?diaries.find(d=>d.date===today()):null}/>);
       if (selected) return <DiaryDetail diary={selected} onBack={()=>setSelected(null)}/>;
 
       return (
         <div style={{position:"fixed", inset:0, display:"flex", flexDirection:"column", background:T.bg, fontFamily:"'Noto Sans KR',sans-serif"}}>
-
-          {/* ── 상단 헤더 ── */}
-          <div style={{
-            background:T.card, borderBottom:`1px solid ${T.border}`,
-            padding:"0 20px",
-            paddingTop:`calc(env(safe-area-inset-top,0px) + 10px)`,
-            paddingBottom:10,
-            display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0
-          }}>
+          <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 20px", paddingTop:`calc(env(safe-area-inset-top,0px) + 10px)`, paddingBottom:10, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
             <span style={{fontSize:17, fontWeight:800, color:T.accent, letterSpacing:3}}>GYEOL</span>
             <div style={{display:"flex", gap:8, alignItems:"center"}}>
-              {/* 일기 탭일 때만 필터 + AI 분석 버튼 표시 */}
               {mainTab==="diary" && (<>
-                <button onClick={()=>setShowFilter(true)}
-                  style={{background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, color:T.text, cursor:"pointer", minHeight:36}}>
-                  📅 필터
-                </button>
-                <button onClick={()=>setShowAI(true)}
-                  style={{background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, color:T.text, cursor:"pointer", minHeight:36}}>
-                  ✨ 결 분석
-                </button>
+                <button onClick={()=>setShowFilter(true)} style={{background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, color:T.text, cursor:"pointer", minHeight:36}}>📅 필터</button>
+                <button onClick={()=>setShowAI(true)} style={{background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, color:T.text, cursor:"pointer", minHeight:36}}>✨ 결 분석</button>
               </>)}
-              {/* 연속 기록 배지 (1일 이상일 때만 표시) */}
-              {streak>0 && (
-                <div style={{background:T.accent, borderRadius:10, padding:"6px 10px", fontSize:12, color:"#fff", fontWeight:700}}>
-                  🔥 {streak}일
-                </div>
-              )}
+              {streak>0 && (<div style={{background:T.accent, borderRadius:10, padding:"6px 10px", fontSize:12, color:"#fff", fontWeight:700}}>🔥 {streak}일</div>)}
             </div>
           </div>
 
-          {/* ── 메인 콘텐츠 영역 (탭에 따라 다른 컴포넌트 렌더링) ── */}
           <div style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch"}}>
-
-            {/* 일기 탭 */}
             {mainTab==="diary" && (
               <div style={{padding:"16px 16px 12px"}}>
-                {dbLoading ? (
-                  <div style={{textAlign:"center", padding:40, color:T.textSub}}>
-                    <div style={{fontSize:14}}>일기를 불러오는 중...</div>
-                  </div>
-                ) : (<>
-                  {/* 연속 기록 배너 (1일 이상일 때만 표시) */}
-                  {streak>0 && (
-                    <div style={{background:T.gradient, borderRadius:14, padding:"14px 18px", marginBottom:14,
-                      display:"flex", alignItems:"center", justifyContent:"space-between", color:"#fff"}}>
-                      <div>
-                        <div style={{fontSize:14, fontWeight:700}}>🔥 {streak}일째 나를 들여다보는 중</div>
-                        <div style={{fontSize:11, opacity:0.85, marginTop:1}}>매일 쌓이는 기록이 결을 만들어요</div>
-                      </div>
-                      <div style={{fontSize:28, fontWeight:800}}>{streak}</div>
-                    </div>
-                  )}
-
-                  {/* 오늘 기록하기 / 수정하기 버튼 */}
+                {dbLoading ? (<div style={{textAlign:"center", padding:40, color:T.textSub}}><div style={{fontSize:14}}>일기를 불러오는 중...</div></div>) : (<>
+                  {streak>0 && (<div style={{background:T.gradient, borderRadius:14, padding:"14px 18px", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"space-between", color:"#fff"}}><div><div style={{fontSize:14, fontWeight:700}}>🔥 {streak}일째 나를 들여다보는 중</div><div style={{fontSize:11, opacity:0.85, marginTop:1}}>매일 쌓이는 기록이 결을 만들어요</div></div><div style={{fontSize:28, fontWeight:800}}>{streak}</div></div>)}
                   <button onClick={()=>{if(todayWritten) setShowEditConfirm(true); else setWriting(true);}}
-                    style={{
-                      width:"100%", padding:16, borderRadius:14, border:"none",
-                      background:todayWritten?T.border:T.gradient,
-                      color:todayWritten?T.textSub:"#fff",
-                      fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:16, minHeight:52,
-                      boxShadow:todayWritten?"none":`0 4px 16px ${T.accent}44`,
-                      display:"flex", alignItems:"center", justifyContent:"center", gap:6
-                    }}>
-                    <span style={{fontSize:18}}>✏️</span>
-                    {todayWritten?"오늘 일기 수정하기":"오늘 하루 기록하기"}
+                    style={{width:"100%", padding:16, borderRadius:14, border:"none", background:todayWritten?T.border:T.gradient, color:todayWritten?T.textSub:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:16, minHeight:52, boxShadow:todayWritten?"none":`0 4px 16px ${T.accent}44`, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}>
+                    <span style={{fontSize:18}}>✏️</span>{todayWritten?"오늘 일기 수정하기":"오늘 하루 기록하기"}
                   </button>
-
-                  {/* 일기 목록 */}
                   <div style={{display:"flex", flexDirection:"column", gap:10}}>
-                    {/* 필터 결과가 없을 때 빈 상태 안내 */}
-                    {filtered.length===0 && (
-                      <div style={{textAlign:"center", padding:40, color:T.textSub}}>
-                        <div style={{fontSize:40, marginBottom:10}}>✏️</div>
-                        <div style={{fontSize:14, lineHeight:1.7}}>아직 기록이 없어요.<br/>오늘의 하루를 솔직하게 적어보세요.</div>
-                      </div>
-                    )}
-                    {/* 일기 카드 목록 */}
+                    {filtered.length===0 && (<div style={{textAlign:"center", padding:40, color:T.textSub}}><div style={{fontSize:40, marginBottom:10}}>✏️</div><div style={{fontSize:14, lineHeight:1.7}}>아직 기록이 없어요.<br/>오늘의 하루를 솔직하게 적어보세요.</div></div>)}
                     {filtered.map(d=>{
                       const total=(d.payments||[]).reduce((s,p)=>s+p.amount,0);
                       return (
-                        <div key={d.id} onClick={()=>setSelected(d)}
-                          style={{background:T.card, borderRadius:16, padding:"16px 18px",
-                            cursor:"pointer", boxShadow:T.shadow, border:"1px solid transparent"}}>
+                        <div key={d.id} onClick={()=>setSelected(d)} style={{background:T.card, borderRadius:16, padding:"16px 18px", cursor:"pointer", boxShadow:T.shadow, border:"1px solid transparent"}}>
                           <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
-                            <div style={{display:"flex", alignItems:"center", gap:6}}>
-                              <span style={{fontSize:12, color:T.textSub}}>{fmt(d.date)}</span>
-                              {isToday(d.date) && <span style={{background:T.accent, color:"#fff", padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700}}>TODAY</span>}
-                            </div>
-                            {total>0 && <span style={{fontSize:13, fontWeight:600, color:T.accent, flexShrink:0}}>{money(total)}</span>}
+                            <div style={{display:"flex", alignItems:"center", gap:6}}><span style={{fontSize:12, color:T.textSub}}>{fmt(d.date)}</span>{isToday(d.date)&&<span style={{background:T.accent, color:"#fff", padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700}}>TODAY</span>}</div>
+                            {total>0&&<span style={{fontSize:13, fontWeight:600, color:T.accent, flexShrink:0}}>{money(total)}</span>}
                           </div>
                           <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:8, lineHeight:1.4}}>{d.title}</div>
-                          {/* 감정 태그 */}
                           <div style={{display:"flex", flexWrap:"wrap", gap:5, marginBottom:6}}>
-                            {(d.emotions||[]).map(e=>EMOTIONS[e.key]?(
-                              <span key={e.key} style={{padding:"4px 10px", borderRadius:12,
-                                background:EMOTIONS[e.key].color+"22", fontSize:12, color:T.text, fontWeight:500}}>
-                                {EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label}
-                              </span>
-                            ):null)}
+                            {(d.emotions||[]).map(e=>EMOTIONS[e.key]?(<span key={e.key} style={{padding:"4px 10px", borderRadius:12, background:EMOTIONS[e.key].color+"22", fontSize:12, color:T.text, fontWeight:500}}>{EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label}</span>):null)}
                           </div>
-                          {/* 장소 태그 */}
                           <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                            {(d.places||[]).map((p,i)=>(
-                              <span key={i} style={{fontSize:11, color:T.textSub}}>📍 {p.name}</span>
-                            ))}
+                            {(d.places||[]).map((p,i)=>(<span key={i} style={{fontSize:11, color:T.textSub}}>📍 {p.name}</span>))}
                           </div>
                         </div>
                       );
@@ -1299,124 +857,62 @@
                 </>)}
               </div>
             )}
-
-            {/* 나의 결(통계) 탭 */}
             {mainTab==="stats" && <StatsTab diaries={diaries}/>}
-
-            {/* 마이 탭 */}
             {mainTab==="mypage" && <MyPage diaries={diaries} streak={streak}/>}
-
-            {/* 연대(커뮤니티) 탭 - 준비 중 화면 */}
             {mainTab==="community" && (
               <div style={{textAlign:"center", padding:"80px 20px", color:T.textSub}}>
                 <div style={{fontSize:48, marginBottom:16}}>🔗</div>
                 <div style={{fontSize:17, fontWeight:700, color:T.text, marginBottom:8}}>결이 맞는 사람들</div>
-                <div style={{fontSize:14, lineHeight:1.8, color:T.textSub, maxWidth:280, margin:"0 auto"}}>
-                  기록이 쌓이면, 당신의 결과 공명하는 사람들을 만날 수 있게 될 거예요.
-                </div>
-                <div style={{marginTop:24, padding:"12px 24px", borderRadius:20, background:T.accentBg,
-                  display:"inline-block", fontSize:13, color:T.accent, fontWeight:600}}>
-                  곧 오픈 예정
-                </div>
+                <div style={{fontSize:14, lineHeight:1.8, color:T.textSub, maxWidth:280, margin:"0 auto"}}>기록이 쌓이면, 당신의 결과 공명하는 사람들을 만날 수 있게 될 거예요.</div>
+                <div style={{marginTop:24, padding:"12px 24px", borderRadius:20, background:T.accentBg, display:"inline-block", fontSize:13, color:T.accent, fontWeight:600}}>곧 오픈 예정</div>
               </div>
             )}
           </div>
 
-          {/* ── 하단 탭 바 ── */}
           <div style={{background:T.card, borderTop:`1px solid ${T.border}`, display:"flex", paddingBottom:`env(safe-area-inset-bottom,0px)`, flexShrink:0}}>
             {tabs.map(t=>(
-              <button key={t.id} onClick={()=>setMainTab(t.id)}
-                style={{flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-                  padding:"10px 0", border:"none", background:"none", cursor:"pointer",
-                  color:mainTab===t.id?T.accent:T.textSub, minHeight:56}}>
+              <button key={t.id} onClick={()=>setMainTab(t.id)} style={{flex:1, display:"flex", flexDirection:"column", alignItems:"center", padding:"10px 0", border:"none", background:"none", cursor:"pointer", color:mainTab===t.id?T.accent:T.textSub, minHeight:56}}>
                 <span style={{fontSize:22, marginBottom:2}}>{t.icon}</span>
                 <span style={{fontSize:10, fontWeight:mainTab===t.id?700:500}}>{t.label}</span>
-                {/* 현재 탭 표시 점 */}
-                {mainTab===t.id && <div style={{width:4, height:4, borderRadius:"50%", background:T.accent, marginTop:3}}/>}
+                {mainTab===t.id&&<div style={{width:4, height:4, borderRadius:"50%", background:T.accent, marginTop:3}}/>}
               </button>
             ))}
           </div>
 
-          {/* ── 날짜 필터 모달 (하단 시트) ── */}
           {showFilter && (
-            <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.5)", zIndex:200,
-              display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={()=>setShowFilter(false)}>
-              <div onClick={e=>e.stopPropagation()} style={{
-                background:T.card, borderRadius:"20px 20px 0 0", padding:"24px 20px",
-                paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 24px)`
-              }}>
+            <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.5)", zIndex:200, display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={()=>setShowFilter(false)}>
+              <div onClick={e=>e.stopPropagation()} style={{background:T.card, borderRadius:"20px 20px 0 0", padding:"24px 20px", paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 24px)`}}>
                 <div style={{width:36, height:4, borderRadius:2, background:T.border, margin:"0 auto 20px"}}/>
                 <div style={{fontSize:16, fontWeight:700, color:T.text, marginBottom:16}}>📅 날짜 필터</div>
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:12, color:T.textSub, fontWeight:600, marginBottom:6}}>시작 날짜</div>
-                  <input type="date" value={sd} onChange={e=>setSd(e.target.value)}
-                    style={{width:"100%", padding:"12px 14px", borderRadius:12, border:`1px solid ${T.border}`,
-                      fontSize:16, background:T.bg, color:T.text, boxSizing:"border-box", WebkitAppearance:"none"}}/>
-                </div>
-                <div style={{marginBottom:20}}>
-                  <div style={{fontSize:12, color:T.textSub, fontWeight:600, marginBottom:6}}>끝 날짜</div>
-                  <input type="date" value={ed} onChange={e=>setEd(e.target.value)}
-                    style={{width:"100%", padding:"12px 14px", borderRadius:12, border:`1px solid ${T.border}`,
-                      fontSize:16, background:T.bg, color:T.text, boxSizing:"border-box", WebkitAppearance:"none"}}/>
-                </div>
+                <div style={{marginBottom:12}}><div style={{fontSize:12, color:T.textSub, fontWeight:600, marginBottom:6}}>시작 날짜</div><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{width:"100%", padding:"12px 14px", borderRadius:12, border:`1px solid ${T.border}`, fontSize:16, background:T.bg, color:T.text, boxSizing:"border-box", WebkitAppearance:"none"}}/></div>
+                <div style={{marginBottom:20}}><div style={{fontSize:12, color:T.textSub, fontWeight:600, marginBottom:6}}>끝 날짜</div><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{width:"100%", padding:"12px 14px", borderRadius:12, border:`1px solid ${T.border}`, fontSize:16, background:T.bg, color:T.text, boxSizing:"border-box", WebkitAppearance:"none"}}/></div>
                 <div style={{display:"flex", gap:10}}>
-                  <button onClick={()=>{setSd("");setEd("");setShowFilter(false);}}
-                    style={{flex:1, padding:15, borderRadius:12, border:`1px solid ${T.border}`,
-                      background:T.card, fontSize:15, fontWeight:600, color:T.textSub, cursor:"pointer", minHeight:50}}>
-                    초기화
-                  </button>
-                  <button onClick={()=>setShowFilter(false)}
-                    style={{flex:1, padding:15, borderRadius:12, border:"none",
-                      background:T.accent, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", minHeight:50}}>
-                    적용
-                  </button>
+                  <button onClick={()=>{setSd("");setEd("");setShowFilter(false);}} style={{flex:1, padding:15, borderRadius:12, border:`1px solid ${T.border}`, background:T.card, fontSize:15, fontWeight:600, color:T.textSub, cursor:"pointer", minHeight:50}}>초기화</button>
+                  <button onClick={()=>setShowFilter(false)} style={{flex:1, padding:15, borderRadius:12, border:"none", background:T.accent, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", minHeight:50}}>적용</button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── AI 분석 모달 ── */}
           {showAI && <AIChatModal onClose={()=>setShowAI(false)} diaries={diaries}/>}
 
-          {/* ── 오늘 일기 수정 확인 모달 ── */}
           {showEditConfirm && (
-            <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.5)", zIndex:200,
-              display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={()=>setShowEditConfirm(false)}>
-              <div onClick={e=>e.stopPropagation()} style={{
-                background:T.card, borderRadius:"20px 20px 0 0", padding:"24px 20px",
-                paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 24px)`, textAlign:"center"
-              }}>
+            <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.5)", zIndex:200, display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={()=>setShowEditConfirm(false)}>
+              <div onClick={e=>e.stopPropagation()} style={{background:T.card, borderRadius:"20px 20px 0 0", padding:"24px 20px", paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 24px)`, textAlign:"center"}}>
                 <div style={{width:36, height:4, borderRadius:2, background:T.border, margin:"0 auto 20px"}}/>
                 <div style={{fontSize:36, marginBottom:10}}>✏️</div>
                 <div style={{fontSize:16, fontWeight:700, color:T.text, marginBottom:6}}>오늘 일기를 이미 작성했어요</div>
                 <div style={{fontSize:14, color:T.textSub, marginBottom:20, lineHeight:1.6}}>수정하시겠어요?</div>
                 <div style={{display:"flex", gap:10}}>
-                  <button onClick={()=>setShowEditConfirm(false)}
-                    style={{flex:1, padding:15, borderRadius:12, border:`1px solid ${T.border}`,
-                      background:T.card, fontSize:15, fontWeight:600, color:T.textSub, cursor:"pointer", minHeight:50}}>
-                    취소
-                  </button>
-                  <button onClick={()=>{setShowEditConfirm(false);setWriting(true);}}
-                    style={{flex:1, padding:15, borderRadius:12, border:"none",
-                      background:T.accent, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", minHeight:50}}>
-                    수정하기
-                  </button>
+                  <button onClick={()=>setShowEditConfirm(false)} style={{flex:1, padding:15, borderRadius:12, border:`1px solid ${T.border}`, background:T.card, fontSize:15, fontWeight:600, color:T.textSub, cursor:"pointer", minHeight:50}}>취소</button>
+                  <button onClick={()=>{setShowEditConfirm(false);setWriting(true);}} style={{flex:1, padding:15, borderRadius:12, border:"none", background:T.accent, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", minHeight:50}}>수정하기</button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── 저장 완료 토스트 메시지 ── */}
           {savedToast && (
-            <div style={{
-              position:"fixed",
-              bottom:`calc(env(safe-area-inset-bottom,0px) + 72px)`,
-              left:"50%", transform:"translateX(-50%)",
-              background:T.accent, color:"#fff", padding:"13px 28px",
-              borderRadius:14, fontSize:14, fontWeight:600,
-              boxShadow:`0 8px 32px ${T.accent}66`, zIndex:2000,
-              whiteSpace:"nowrap", animation:"slideUp 0.3s ease"
-            }}>
+            <div style={{position:"fixed", bottom:`calc(env(safe-area-inset-bottom,0px) + 72px)`, left:"50%", transform:"translateX(-50%)", background:T.accent, color:"#fff", padding:"13px 28px", borderRadius:14, fontSize:14, fontWeight:600, boxShadow:`0 8px 32px ${T.accent}66`, zIndex:2000, whiteSpace:"nowrap", animation:"slideUp 0.3s ease"}}>
               ✨ 오늘의 결이 저장되었어요
             </div>
           )}
@@ -1424,23 +920,11 @@
       );
     }
 
-    // ========================================================
-    // 🔀 AuthRouter - 로그인 여부에 따라 화면 분기
-    // - 로딩 중  → LoadingScreen
-    // - 로그인 O → MainApp
-    // - 로그인 X → LoginPage
-    // ========================================================
     function AuthRouter() {
       const {user, loading} = useAuth();
       if (loading) return <LoadingScreen text="나의 결을 발견하는 중..."/>;
       return user ? <MainApp/> : <LoginPage/>;
     }
-
-    // ========================================================
-    // 🚀 App - 앱 최상위 진입점
-    // - AuthProvider로 전체를 감싸서 로그인 정보를 앱 전체에 공급
-    // - ReactDOM.createRoot로 #root 요소에 실제로 렌더링
-    // ========================================================
     function App() { return <AuthProvider><AuthRouter/></AuthProvider>; }
     ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
   </script>
