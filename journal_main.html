@@ -42,28 +42,24 @@
 
 
     // ========================================================
-    // 🤖 Gemini AI 헬퍼
+    // 🤖 Gemini AI 헬퍼 (Supabase Edge Function 경유 - API 키 서버에서 관리)
     // ========================================================
-    const GEMINI_API_KEY = "AIzaSyB1bZ0YXkYuW44sMWmWqEKk7H-X6YWPv-0";
     async function callGemini(prompt) {
       try {
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+          `${SUPABASE_URL}/functions/v1/gemini-proxy`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.8, maxOutputTokens: 700 }
-            }),
+            body: JSON.stringify({ prompt }),
           }
         );
         const data = await res.json();
         if (data.error) {
           console.error("Gemini API 오류:", data.error);
-          return `API 오류: ${data.error.message}`;
+          return `API 오류: ${data.error}`;
         }
-        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "분석을 가져올 수 없었어요.";
+        return data.text || "분석을 가져올 수 없었어요.";
       } catch (e) {
         console.error("Gemini 호출 실패:", e);
         return "네트워크 오류로 분석을 가져올 수 없었어요.";
