@@ -41,31 +41,7 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ✅ [추가] 네이버 지도 설정
-    const NAVER_CLIENT_ID     = "3mv25em56b";
-    const NAVER_CLIENT_SECRET = "aYeZn8YMntNBP373gyEa1Szp036vFGO0mOJl5uFq";
-    const CORS_PROXY          = "https://corsproxy.io/?";
 
-    // 네이버 지역 검색 — 상호명 검색 (CORS 프록시 경유)
-    // ⚠️ 실서비스에서는 백엔드 라우트로 교체할 것
-    async function naverSearchPlaces(query) {
-      const apiUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`;
-      try {
-        const res = await fetch(`${CORS_PROXY}${encodeURIComponent(apiUrl)}`, {
-          headers: {
-            "X-Naver-Client-Id": NAVER_CLIENT_ID,
-            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-          },
-        });
-        const data = await res.json();
-        return (data.items || []).map(item => ({
-          name:    item.title.replace(/<[^>]+>/g, ""),
-          address: item.roadAddress || item.address,
-          lat:     parseFloat(item.mapy) / 10000000,
-          lng:     parseFloat(item.mapx) / 10000000,
-        }));
-      } catch { return []; }
-    }
 
     const T = {
       bg:"#F5F0E8", card:"#FFFCF7", accent:"#B8956A", accentLight:"#D4B896",
@@ -240,15 +216,11 @@
       const mapInst   = useRef(null);
       const markerRef = useRef(null);
 
-      const [query,         setQuery]         = useState("");
-      const [results,       setResults]       = useState([]);
-      const [searching,     setSearching]     = useState(false);
       const [selectedPlace, setSelectedPlace] = useState(null);
-      const [showMap,       setShowMap]       = useState(false);
 
-      // 지도 탭 열릴 때 초기화
+      // 컴포넌트 마운트 시 지도 초기화
       useEffect(() => {
-        if (!showMap || !mapRef.current || mapInst.current) return;
+        if (!mapRef.current || mapInst.current) return;
         if (!window.naver?.maps) return;
         const map = new window.naver.maps.Map(mapRef.current, {
           center: new window.naver.maps.LatLng(37.5665, 126.978),
@@ -270,7 +242,7 @@
             }
           );
         });
-      }, [showMap]);
+      }, []);
 
       const placeMarker = ll => {
         if (markerRef.current) markerRef.current.setMap(null);
@@ -278,88 +250,20 @@
         mapInst.current.panTo(ll);
       };
 
-      const handleSearch = async () => {
-        if (!query.trim()) return;
-        setSearching(true);
-        setResults(await naverSearchPlaces(query));
-        setSearching(false);
-      };
-
-      // 검색 결과 선택 → 지도 이동
-      const handlePick = place => {
-        setSelectedPlace(place);
-        setResults([]);
-        setQuery(place.name);
-        setShowMap(true);
-        setTimeout(() => {
-          if (!mapInst.current || !window.naver) return;
-          const ll = new window.naver.maps.LatLng(place.lat, place.lng);
-          placeMarker(ll);
-          mapInst.current.setCenter(ll);
-          mapInst.current.setZoom(17);
-        }, 300);
-      };
-
       return (
         <div style={{ position:"fixed", inset:0, zIndex:300, background:T.bg, display:"flex", flexDirection:"column", fontFamily:"'Noto Sans KR',sans-serif" }}>
           {/* 헤더 */}
           <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 16px", paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:T.textSub,minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>←</button>
-            <span style={{fontSize:17, fontWeight:700, color:T.text}}>방문 장소 검색</span>
+            <span style={{fontSize:17, fontWeight:700, color:T.text}}>방문 장소 추가</span>
+            <span style={{fontSize:13, color:T.textSub, marginLeft:4}}>지도를 눌러 장소를 선택하세요</span>
           </div>
 
-          {/* 검색바 */}
-          <div style={{ background:T.card, padding:"12px 16px 14px", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
-            <div style={{display:"flex", gap:8}}>
-              <input
-                value={query} onChange={e=>setQuery(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&handleSearch()}
-                placeholder="장소 검색 (예: 사당 스타벅스)"
-                style={{ flex:1, padding:"11px 14px", border:`1.5px solid ${T.accentLight}`, borderRadius:10, fontSize:16, background:T.bg, outline:"none", color:T.text, WebkitAppearance:"none" }}
-              />
-              <button onClick={handleSearch} disabled={searching}
-                style={{ padding:"11px 18px", background:T.accent, color:"#fff", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor:"pointer", minHeight:44, opacity:searching?0.7:1 }}>
-                {searching ? "…" : "검색"}
-              </button>
-            </div>
-
-            {/* 검색 결과 드롭다운 */}
-            {results.length > 0 && (
-              <div style={{ marginTop:8, background:T.card, border:`1px solid ${T.border}`, borderRadius:12, overflow:"hidden", boxShadow:"0 4px 20px rgba(0,0,0,0.1)" }}>
-                {results.map((p, i) => (
-                  <div key={i} onClick={()=>handlePick(p)}
-                    style={{ padding:"13px 16px", borderBottom:i<results.length-1?`1px solid ${T.border}`:"none", cursor:"pointer" }}>
-                    <div style={{fontWeight:600, fontSize:14, color:T.text}}>📍 {p.name}</div>
-                    <div style={{fontSize:12, color:T.textSub, marginTop:3}}>{p.address}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 탭 전환 */}
-            <div style={{display:"flex", gap:8, marginTop:10}}>
-              {[["🔍 검색으로 선택", false], ["🗺️ 지도에서 직접 선택", true]].map(([label, val]) => (
-                <button key={label} onClick={()=>setShowMap(val)}
-                  style={{ flex:1, padding:"8px", fontSize:12, fontWeight:600, borderRadius:8, border:"none", cursor:"pointer", minHeight:36, background:showMap===val?T.accent:T.accentBg, color:showMap===val?"#fff":T.textSub }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 지도 / 안내 영역 */}
+          {/* 지도 영역 */}
           <div style={{flex:1, position:"relative", overflow:"hidden"}}>
-            {showMap ? (
-              <div ref={mapRef} style={{width:"100%", height:"100%"}}/>
-            ) : (
-              <div style={{ height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10, color:T.textSub }}>
-                <div style={{fontSize:48}}>🔍</div>
-                <div style={{fontSize:15, fontWeight:700, color:T.textSub}}>위에서 장소를 검색하세요</div>
-                <div style={{fontSize:13, color:T.textMuted, textAlign:"center", lineHeight:1.7}}>검색 결과에서 선택하거나<br/>"지도에서 직접 선택"을 눌러보세요</div>
-              </div>
-            )}
+            <div ref={mapRef} style={{width:"100%", height:"100%"}}/>
             {/* 선택 위치 말풍선 */}
-            {showMap && selectedPlace && (
+            {selectedPlace && (
               <div style={{ position:"absolute", bottom:90, left:16, right:16, background:T.card, borderRadius:14, padding:"12px 16px", boxShadow:"0 4px 20px rgba(0,0,0,0.12)", border:`1px solid ${T.border}` }}>
                 <div style={{fontSize:11, color:T.accent, fontWeight:700, marginBottom:3}}>📍 선택한 위치</div>
                 <div style={{fontSize:14, fontWeight:700, color:T.text}}>{selectedPlace.name}</div>
