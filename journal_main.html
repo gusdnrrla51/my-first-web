@@ -36,7 +36,6 @@
   <script type="text/babel">
     const { useState, useRef, useEffect, createContext, useContext, useCallback } = React;
 
-    const GOOGLE_MAPS_KEY = 'AIzaSyDkR5UQ1w9ZVMBvfRXhl3XrzmjCWbu2wb4';
     const SUPABASE_URL = 'https://vgtpjvwtpzvxxlizsvos.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -575,6 +574,28 @@
     }
 
     // ========================================================
+    // 🗺️ NaverMapView — 저장된 좌표를 네이버 지도로 표시
+    // ========================================================
+    function NaverMapView({ lat, lng }) {
+      const divRef = useRef(null);
+      useEffect(() => {
+        if (!divRef.current || !window.naver?.maps || !lat || !lng) return;
+        const ll = new window.naver.maps.LatLng(lat, lng);
+        const map = new window.naver.maps.Map(divRef.current, {
+          center: ll,
+          zoom: 17,
+          mapDataControl: false,
+          scaleControl: false,
+          mapTypeControl: false,
+        });
+        new window.naver.maps.Marker({ position: ll, map });
+      }, [lat, lng]);
+
+      if (!lat || !lng) return null;
+      return <div ref={divRef} style={{ width:"100%", height:200 }} />;
+    }
+
+    // ========================================================
     // 📖 DiaryDetail — 장소 표시 시 address 필드도 보여줌
     // ========================================================
     function DiaryDetail({diary, onBack}) {
@@ -626,11 +647,11 @@
                       </div>
                       {p.isFirst && <span style={{padding:"2px 8px", borderRadius:8, background:"#E8F5E9", color:"#4CAF50", fontSize:10, fontWeight:700, flexShrink:0}}>첫 방문</span>}
                     </div>
-                    <div style={{borderRadius:12, overflow:"hidden", border:`1px solid ${T.border}`}}>
-                      <iframe title={p.name} width="100%" height="200"
-                        style={{border:"none", display:"block"}} loading="lazy" allowFullScreen
-                        src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${encodeURIComponent(p.name+(p.address?" "+p.address:""))}&language=ko`}/>
-                    </div>
+                    {p.lat && p.lng && (
+                      <div style={{borderRadius:12, overflow:"hidden", border:`1px solid ${T.border}`}}>
+                        <NaverMapView lat={p.lat} lng={p.lng} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
