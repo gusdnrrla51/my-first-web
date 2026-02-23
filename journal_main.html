@@ -561,16 +561,22 @@
     // ========================================================
     // 🤖 DiaryAIModal — 일기 1개 AI 분석 바텀시트
     // ========================================================
-    function DiaryAIModal({ diary, onClose }) {
-      const [analysis, setAnalysis] = useState(null);
-      const [loading, setLoading] = useState(true);
+    function DiaryAIModal({ diary, onClose, onAnalysisSaved }) {
+      const [analysis, setAnalysis] = useState(diary.ai_analysis || null);
+      const [loading, setLoading] = useState(!diary.ai_analysis);
+      const [cached, setCached] = useState(!!diary.ai_analysis);
 
       useEffect(() => {
+        if (diary.ai_analysis) return; // 이미 저장된 분석 있으면 API 호출 안 함
         (async () => {
           const ctx = `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${diary.content||""}\n감정: ${(diary.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}\n활동: ${(diary.activities||[]).join(", ")||"없음"}\n방문 장소: ${(diary.places||[]).map(p=>p.name).join(", ")||"없음"}\n지출: ${(diary.payments||[]).map(p=>`${p.store} ${p.amount}원`).join(", ")||"없음"}`;
           const prompt = `당신은 따뜻하고 공감 능력이 뛰어난 감정 분석 AI입니다. 아래 하루 일기를 분석해서 사용자에게 친근하고 따뜻하게 이야기해주세요.\n\n${ctx}\n\n다음 형식으로 분석해주세요 (이모지 활용, 친근한 말투, 각 항목 2-3문장):\n\n💜 오늘의 감정 분석\n(느낀 감정의 의미와 가능한 원인을 공감하며 분석)\n\n✨ 오늘의 하이라이트\n(일기에서 좋았던 점, 의미 있었던 순간 찾아주기)\n\n🌱 내일을 위한 한마디\n(격려와 따뜻한 조언. 부정적 감정이 강하면 전문 상담도 부드럽게 소개)`;
           const text = await callGemini(prompt);
-          setAnalysis(text); setLoading(false);
+          setAnalysis(text);
+          setLoading(false);
+          // Supabase에 분석 결과 저장
+          const { error } = await sb.from('diary_entries').update({ ai_analysis: text }).eq('id', diary.id);
+          if (!error && onAnalysisSaved) onAnalysisSaved(diary.id, text);
         })();
       }, []);
 
@@ -582,7 +588,10 @@
                 <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#4A3728,#7A5C44)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🤖</div>
                 <div>
                   <div style={{ fontSize:15, fontWeight:700, color:T.text }}>AI 일기 분석</div>
-                  <div style={{ fontSize:11, color:T.textSub, marginTop:1, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{diary.title}</div>
+                  <div style={{ fontSize:11, color:T.textSub, marginTop:1, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {diary.title}
+                    {cached && <span style={{ marginLeft:6, background:"#e8f5e9", color:"#2e7d32", borderRadius:6, padding:"1px 6px", fontSize:10, fontWeight:700 }}>저장됨</span>}
+                  </div>
                 </div>
               </div>
               <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:T.textSub, minWidth:44, minHeight:44, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
@@ -825,6 +834,11 @@
       const [showEditConfirm, setShowEditConfirm] = useState(false);
       const [aiDiary, setAiDiary] = useState(null);
 
+      // AI 분석 결과 저장 후 로컬 state 업데이트 (재로드 없이)
+      const handleAnalysisSaved = useCallback((diaryId, text) => {
+        setDiaries(prev => prev.map(d => d.id === diaryId ? { ...d, ai_analysis: text } : d));
+      }, []);
+
       const loadDiaries = useCallback(async () => {
         setDbLoading(true);
         const { data, error } = await sb.from('diary_entries').select('*').eq('user_id', user.id).order('date', { ascending: false });
@@ -956,7 +970,7 @@
           )}
 
           {showAI && <AIChatModal onClose={()=>setShowAI(false)} diaries={diaries}/>}
-          {aiDiary && <DiaryAIModal diary={aiDiary} onClose={()=>setAiDiary(null)}/>}
+          {aiDiary && <DiaryAIModal diary={aiDiary} onClose={()=>setAiDiary(null)} onAnalysisSaved={handleAnalysisSaved}/>}
 
           {showEditConfirm && (
             <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.5)", zIndex:200, display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={()=>setShowEditConfirm(false)}>
