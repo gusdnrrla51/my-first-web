@@ -561,40 +561,79 @@
     // ========================================================
     // 🤖 DiaryAIModal — 일기 1개 AI 분석 바텀시트
     // ========================================================
+    const AI_LENGTH_OPTIONS = [
+      { key:"short",  label:"짧게",  desc:"각 항목 1문장, 5줄 이내로 핵심만 간결하게" },
+      { key:"normal", label:"보통",  desc:"각 항목 2문장 내외" },
+      { key:"long",   label:"자세히",desc:"각 항목 3-4문장, 풍부하게" },
+    ];
+    function getAILengthPromptSuffix(len) {
+      if (len === "short")  return "⚠️ 매우 중요: 전체 응답을 5줄 이내로 작성하세요. 각 항목은 단 1문장만 사용하고 이모지 포함 헤더는 유지하세요.";
+      if (len === "long")   return "각 항목을 3-4문장으로 풍부하고 자세하게 작성하세요.";
+      return "각 항목을 2문장 내외로 작성하세요.";
+    }
+
     function DiaryAIModal({ diary, onClose, onAnalysisSaved }) {
+      const [aiLen, setAiLen] = React.useState(() => localStorage.getItem("ai_length") || "normal");
       const [analysis, setAnalysis] = useState(diary.ai_analysis || null);
       const [loading, setLoading] = useState(!diary.ai_analysis);
       const [cached, setCached] = useState(!!diary.ai_analysis);
 
+      const runAnalysis = React.useCallback(async (len) => {
+        setLoading(true); setAnalysis(null); setCached(false);
+        const ctx = `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${diary.content||""}\n감정: ${(diary.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}\n활동: ${(diary.activities||[]).join(", ")||"없음"}\n방문 장소: ${(diary.places||[]).map(p=>p.name).join(", ")||"없음"}\n지출: ${(diary.payments||[]).map(p=>`${p.store} ${p.amount}원`).join(", ")||"없음"}`;
+        const prompt = `당신은 따뜻하고 공감 능력이 뛰어난 감정 분석 AI입니다. 아래 하루 일기를 분석해서 사용자에게 친근하고 따뜻하게 이야기해주세요.\n\n${ctx}\n\n다음 형식으로 분석해주세요 (이모지 활용, 친근한 말투):\n\n💜 오늘의 감정 분석\n✨ 오늘의 하이라이트\n🌱 내일을 위한 한마디\n\n${getAILengthPromptSuffix(len)}`;
+        const text = await callGemini(prompt);
+        setAnalysis(text); setLoading(false);
+        const { error } = await sb.from('diary_entries').update({ ai_analysis: text }).eq('id', diary.id);
+        if (!error && onAnalysisSaved) onAnalysisSaved(diary.id, text);
+      }, [diary]);
+
       useEffect(() => {
-        if (diary.ai_analysis) return; // 이미 저장된 분석 있으면 API 호출 안 함
-        (async () => {
-          const ctx = `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${diary.content||""}\n감정: ${(diary.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}\n활동: ${(diary.activities||[]).join(", ")||"없음"}\n방문 장소: ${(diary.places||[]).map(p=>p.name).join(", ")||"없음"}\n지출: ${(diary.payments||[]).map(p=>`${p.store} ${p.amount}원`).join(", ")||"없음"}`;
-          const prompt = `당신은 따뜻하고 공감 능력이 뛰어난 감정 분석 AI입니다. 아래 하루 일기를 분석해서 사용자에게 친근하고 따뜻하게 이야기해주세요.\n\n${ctx}\n\n다음 형식으로 분석해주세요 (이모지 활용, 친근한 말투, 각 항목 2-3문장):\n\n💜 오늘의 감정 분석\n(느낀 감정의 의미와 가능한 원인을 공감하며 분석)\n\n✨ 오늘의 하이라이트\n(일기에서 좋았던 점, 의미 있었던 순간 찾아주기)\n\n🌱 내일을 위한 한마디\n(격려와 따뜻한 조언. 부정적 감정이 강하면 전문 상담도 부드럽게 소개)`;
-          const text = await callGemini(prompt);
-          setAnalysis(text);
-          setLoading(false);
-          // Supabase에 분석 결과 저장
-          const { error } = await sb.from('diary_entries').update({ ai_analysis: text }).eq('id', diary.id);
-          if (!error && onAnalysisSaved) onAnalysisSaved(diary.id, text);
-        })();
+        if (!diary.ai_analysis) runAnalysis(aiLen);
       }, []);
+
+      const handleLenChange = (len) => {
+        localStorage.setItem("ai_length", len);
+        setAiLen(len);
+      };
 
       return (
         <div style={{ position:"fixed", inset:0, background:"rgba(74,55,40,0.6)", zIndex:250, display:"flex", flexDirection:"column", justifyContent:"flex-end" }} onClick={onClose}>
           <div onClick={e=>e.stopPropagation()} style={{ background:T.card, borderRadius:"20px 20px 0 0", maxHeight:"82vh", display:"flex", flexDirection:"column", boxShadow:"0 -8px 40px rgba(0,0,0,0.18)", paddingBottom:`env(safe-area-inset-bottom,0px)` }}>
-            <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#4A3728,#7A5C44)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🤖</div>
-                <div>
-                  <div style={{ fontSize:15, fontWeight:700, color:T.text }}>AI 일기 분석</div>
-                  <div style={{ fontSize:11, color:T.textSub, marginTop:1, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    {diary.title}
-                    {cached && <span style={{ marginLeft:6, background:"#e8f5e9", color:"#2e7d32", borderRadius:6, padding:"1px 6px", fontSize:10, fontWeight:700 }}>저장됨</span>}
+            <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#4A3728,#7A5C44)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🤖</div>
+                  <div>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.text }}>AI 일기 분석</div>
+                    <div style={{ fontSize:11, color:T.textSub, marginTop:1, maxWidth:180, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {diary.title}
+                      {cached && <span style={{ marginLeft:6, background:"#e8f5e9", color:"#2e7d32", borderRadius:6, padding:"1px 6px", fontSize:10, fontWeight:700 }}>저장됨</span>}
+                    </div>
                   </div>
                 </div>
+                <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:T.textSub, minWidth:44, minHeight:44, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
               </div>
-              <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:T.textSub, minWidth:44, minHeight:44, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+              {/* 길이 설정 토글 */}
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
+                <span style={{ fontSize:11, color:T.textSub, flexShrink:0 }}>응답 길이</span>
+                <div style={{ display:"flex", background:T.bg, borderRadius:8, padding:2, gap:2 }}>
+                  {AI_LENGTH_OPTIONS.map(o => (
+                    <button key={o.key} onClick={() => handleLenChange(o.key)}
+                      style={{ fontSize:11, fontWeight:aiLen===o.key?700:400, padding:"4px 10px", borderRadius:6, border:"none", cursor:"pointer",
+                        background: aiLen===o.key ? "#7A5C44" : "transparent",
+                        color: aiLen===o.key ? "#fff" : T.textSub }}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                {cached && !loading && (
+                  <button onClick={() => runAnalysis(aiLen)}
+                    style={{ fontSize:11, color:"#7A5C44", background:"none", border:"1px solid #7A5C44", borderRadius:6, padding:"3px 8px", cursor:"pointer", fontWeight:600, flexShrink:0 }}>
+                    다시 분석
+                  </button>
+                )}
+              </div>
             </div>
             <div style={{ flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:20 }}>
               {loading ? (
