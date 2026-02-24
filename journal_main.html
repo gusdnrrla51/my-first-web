@@ -522,30 +522,42 @@
     // 📊 WeeklyAISummary — 최근 7일 일기 자동 AI 분석 카드
     // ========================================================
     function WeeklyAISummary({ diaries }) {
+      const last7 = diaries.filter(d => {
+        const days = Math.floor((new Date() - new Date(d.date + "T00:00:00")) / 86400000);
+        return days < 7;
+      });
+      const cacheKey = `gyeol_weekly_${last7.map(d=>d.date).sort().join(",")}`;
       const [summary, setSummary] = useState(null);
       const [loading, setLoading] = useState(false);
       const [expanded, setExpanded] = useState(false);
       const [generated, setGenerated] = useState(false);
 
-      const last7 = diaries.filter(d => {
-        const days = Math.floor((new Date() - new Date(d.date + "T00:00:00")) / 86400000);
-        return days < 7;
-      });
+      useEffect(() => {
+        try {
+          const hit = localStorage.getItem(cacheKey);
+          if (hit) { setSummary(hit); setGenerated(true); setExpanded(true); }
+          else { setSummary(null); setGenerated(false); }
+        } catch {}
+      }, [cacheKey]);
 
       const generate = useCallback(async () => {
         if (last7.length === 0 || loading) return;
         setLoading(true); setExpanded(true);
         const ctx = last7.map(d =>
-          `[${d.date}] 제목: ${d.title} / 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")} / 활동: ${(d.activities||[]).join(", ")||"없음"} / 일기 내용: ${(d.content||"").slice(0,80)}`
+          `[${d.date}] 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"} / 활동: ${(d.activities||[]).join(", ")||"없음"}`
         ).join("\n");
-        const prompt = `당신은 따뜻하고 공감 능력이 뛰어난 감정 분석 AI입니다. 아래는 사용자의 최근 7일간 일기입니다.\n\n${ctx}\n\n다음 형식으로 분석해주세요 (이모지 활용, 친근하고 따뜻한 말투, 각 항목 2-3문장):\n\n💜 이번 주 감정의 흐름\n(어떤 감정이 주를 이뤘는지, 전반적인 감정 변화 흐름을 공감하며 분석)\n\n🏃 많이 한 활동\n(어떤 활동을 많이 했는지, 그것이 기분에 어떤 영향을 줬는지)\n\n🌱 AI의 한마디\n(따뜻한 응원 메시지. 단, 슬픔·분노·불안·외로움이 주를 이루면 전문 상담을 부드럽게 제안해줄 것)`;
-        const text = await callGemini(prompt);
-        setSummary(text); setLoading(false); setGenerated(true);
-      }, [last7.length]);
+        const prompt = `아래 최근 7일 일기를 따뜻하게 분석해주세요. 전체 5줄 이내로 간결하게.\n\n${ctx}\n\n💜 이번 주 감정 흐름 한 줄\n🏃 많이 한 활동 한 줄\n🌱 한마디 응원 (슬픔·불안이 주를 이루면 전문 상담 부드럽게 제안)`;
+        try {
+          const text = await callGemini(prompt);
+          setSummary(text);
+          try { localStorage.setItem(cacheKey, text); } catch {}
+        } catch {}
+        setLoading(false); setGenerated(true);
+      }, [cacheKey, last7.length]);
 
       useEffect(() => {
         if (last7.length > 0 && !generated && !loading) generate();
-      }, [diaries.length]);
+      }, [diaries.length, generated]);
 
       if (last7.length === 0) return null;
 
@@ -576,21 +588,28 @@
     // 🤖 DiaryAIModal — 일기 1개 AI 분석 바텀시트
     // ========================================================
     function DiaryAIModal({ diary, onClose, onAnalysisSaved }) {
-      const [analysis, setAnalysis] = useState(diary.ai_analysis || null);
-      const [loading, setLoading] = useState(!diary.ai_analysis);
-      const [cached, setCached] = useState(!!diary.ai_analysis);
+      const cacheKey = `gyeol_ai_${diary.date}`;
+      const initial = diary.ai_analysis || (() => { try { return localStorage.getItem(cacheKey); } catch { return null; } })();
+      const [analysis, setAnalysis] = useState(initial || null);
+      const [loading, setLoading] = useState(!initial);
+      const [cached, setCached] = useState(!!initial);
 
       useEffect(() => {
-        if (diary.ai_analysis) return; // 이미 저장된 분석 있으면 API 호출 안 함
+        if (initial) return; // 캐시된 분석 있으면 API 호출 안 함
         (async () => {
-          const ctx = `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${diary.content||""}\n감정: ${(diary.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}\n활동: ${(diary.activities||[]).join(", ")||"없음"}\n방문 장소: ${(diary.places||[]).map(p=>p.name).join(", ")||"없음"}\n지출: ${(diary.payments||[]).map(p=>`${p.store} ${p.amount}원`).join(", ")||"없음"}`;
-          const prompt = `당신은 따뜻하고 공감 능력이 뛰어난 감정 분석 AI입니다. 아래 하루 일기를 분석해서 사용자에게 친근하고 따뜻하게 이야기해주세요.\n\n${ctx}\n\n다음 형식으로 분석해주세요 (이모지 활용, 친근한 말투, 각 항목 2-3문장):\n\n💜 오늘의 감정 분석\n(느낀 감정의 의미와 가능한 원인을 공감하며 분석)\n\n✨ 오늘의 하이라이트\n(일기에서 좋았던 점, 의미 있었던 순간 찾아주기)\n\n🌱 내일을 위한 한마디\n(격려와 따뜻한 조언. 부정적 감정이 강하면 전문 상담도 부드럽게 소개)`;
-          const text = await callGemini(prompt);
-          setAnalysis(text);
-          setLoading(false);
-          // Supabase에 분석 결과 저장
-          const { error } = await sb.from('diary_entries').update({ ai_analysis: text }).eq('id', diary.id);
-          if (!error && onAnalysisSaved) onAnalysisSaved(diary.id, text);
+          try {
+            const ctx = `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${(diary.content||"").slice(0,200)}\n감정: ${(diary.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}\n활동: ${(diary.activities||[]).join(", ")||"없음"}`;
+            const prompt = `아래 하루 일기를 따뜻하고 공감 있게 분석해주세요. 전체 5줄 이내로 간결하게.\n\n${ctx}\n\n💜 감정 한 줄\n✨ 오늘의 하이라이트 한 줄\n🌱 내일을 위한 한마디 (부정적 감정이 강하면 상담 제안 포함)`;
+            const text = await callGemini(prompt);
+            setAnalysis(text);
+            try { localStorage.setItem(cacheKey, text); } catch {}
+            if (onAnalysisSaved) onAnalysisSaved(diary.id, text);
+            sb.from('diary_entries').update({ ai_analysis: text }).eq('id', diary.id);
+          } catch (e) {
+            setAnalysis("분석을 가져올 수 없었어요. 잠시 후 다시 시도해주세요.");
+          } finally {
+            setLoading(false);
+          }
         })();
       }, []);
 
