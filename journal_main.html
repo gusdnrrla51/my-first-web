@@ -44,7 +44,7 @@
     // 키는 서버 환경변수에만 있으므로 브라우저에 노출되지 않음
     async function naverSearchPlaces(query) {
       try {
-        const res = await fetch(`/api/search-places?query=${encodeURIComponent(query)}`);
+        const res = await fetch(`https://my-first-web-eta.vercel.app/api/search-places?query=${encodeURIComponent(query)}`);
         const data = await res.json();
         return (data.items || []).map(item => ({
           name:    item.title.replace(/<[^>]+>/g, ""),
