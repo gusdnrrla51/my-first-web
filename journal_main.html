@@ -36,7 +36,6 @@
   <script type="text/babel">
     const { useState, useRef, useEffect, createContext, useContext, useCallback } = React;
 
-    const GOOGLE_MAPS_KEY = 'AIzaSyDkR5UQ1w9ZVMBvfRXhl3XrzmjCWbu2wb4';
     const SUPABASE_URL = 'https://vgtpjvwtpzvxxlizsvos.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -54,6 +53,34 @@
           lng:     parseFloat(item.mapx) / 10000000,
         }));
       } catch { return []; }
+    }
+
+    // ========================================================
+    // 🤖 Gemini AI 헬퍼 (Supabase Edge Function 경유 - API 키 서버에서 관리)
+    // ========================================================
+    async function callGemini(prompt) {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/functions/v1/gemini-proxy`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ prompt }),
+          }
+        );
+        const data = await res.json();
+        if (data.error) {
+          console.error("Gemini API 오류:", data.error);
+          return `API 오류: ${data.error}`;
+        }
+        return data.text || "분석을 가져올 수 없었어요.";
+      } catch (e) {
+        console.error("Gemini 호출 실패:", e);
+        return "네트워크 오류로 분석을 가져올 수 없었어요.";
+      }
     }
 
     const T = {
@@ -229,15 +256,11 @@
       const mapInst   = useRef(null);
       const markerRef = useRef(null);
 
-      const [query,         setQuery]         = useState("");
-      const [results,       setResults]       = useState([]);
-      const [searching,     setSearching]     = useState(false);
       const [selectedPlace, setSelectedPlace] = useState(null);
-      const [showMap,       setShowMap]       = useState(false);
 
-      // 지도 탭 열릴 때 초기화
+      // 컴포넌트 마운트 시 지도 초기화
       useEffect(() => {
-        if (!showMap || !mapRef.current || mapInst.current) return;
+        if (!mapRef.current || mapInst.current) return;
         if (!window.naver?.maps) return;
         const map = new window.naver.maps.Map(mapRef.current, {
           center: new window.naver.maps.LatLng(37.5665, 126.978),
@@ -259,7 +282,7 @@
             }
           );
         });
-      }, [showMap]);
+      }, []);
 
       const placeMarker = ll => {
         if (markerRef.current) markerRef.current.setMap(null);
@@ -267,88 +290,20 @@
         mapInst.current.panTo(ll);
       };
 
-      const handleSearch = async () => {
-        if (!query.trim()) return;
-        setSearching(true);
-        setResults(await naverSearchPlaces(query));
-        setSearching(false);
-      };
-
-      // 검색 결과 선택 → 지도 이동
-      const handlePick = place => {
-        setSelectedPlace(place);
-        setResults([]);
-        setQuery(place.name);
-        setShowMap(true);
-        setTimeout(() => {
-          if (!mapInst.current || !window.naver) return;
-          const ll = new window.naver.maps.LatLng(place.lat, place.lng);
-          placeMarker(ll);
-          mapInst.current.setCenter(ll);
-          mapInst.current.setZoom(17);
-        }, 300);
-      };
-
       return (
         <div style={{ position:"fixed", inset:0, zIndex:300, background:T.bg, display:"flex", flexDirection:"column", fontFamily:"'Noto Sans KR',sans-serif" }}>
           {/* 헤더 */}
           <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 16px", paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:T.textSub,minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>←</button>
-            <span style={{fontSize:17, fontWeight:700, color:T.text}}>방문 장소 검색</span>
+            <span style={{fontSize:17, fontWeight:700, color:T.text}}>방문 장소 추가</span>
+            <span style={{fontSize:13, color:T.textSub, marginLeft:4}}>지도를 눌러 장소를 선택하세요</span>
           </div>
 
-          {/* 검색바 */}
-          <div style={{ background:T.card, padding:"12px 16px 14px", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
-            <div style={{display:"flex", gap:8}}>
-              <input
-                value={query} onChange={e=>setQuery(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&handleSearch()}
-                placeholder="장소 검색 (예: 사당 스타벅스)"
-                style={{ flex:1, padding:"11px 14px", border:`1.5px solid ${T.accentLight}`, borderRadius:10, fontSize:16, background:T.bg, outline:"none", color:T.text, WebkitAppearance:"none" }}
-              />
-              <button onClick={handleSearch} disabled={searching}
-                style={{ padding:"11px 18px", background:T.accent, color:"#fff", border:"none", borderRadius:10, fontSize:14, fontWeight:700, cursor:"pointer", minHeight:44, opacity:searching?0.7:1 }}>
-                {searching ? "…" : "검색"}
-              </button>
-            </div>
-
-            {/* 검색 결과 드롭다운 */}
-            {results.length > 0 && (
-              <div style={{ marginTop:8, background:T.card, border:`1px solid ${T.border}`, borderRadius:12, overflow:"hidden", boxShadow:"0 4px 20px rgba(0,0,0,0.1)" }}>
-                {results.map((p, i) => (
-                  <div key={i} onClick={()=>handlePick(p)}
-                    style={{ padding:"13px 16px", borderBottom:i<results.length-1?`1px solid ${T.border}`:"none", cursor:"pointer" }}>
-                    <div style={{fontWeight:600, fontSize:14, color:T.text}}>📍 {p.name}</div>
-                    <div style={{fontSize:12, color:T.textSub, marginTop:3}}>{p.address}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 탭 전환 */}
-            <div style={{display:"flex", gap:8, marginTop:10}}>
-              {[["🔍 검색으로 선택", false], ["🗺️ 지도에서 직접 선택", true]].map(([label, val]) => (
-                <button key={label} onClick={()=>setShowMap(val)}
-                  style={{ flex:1, padding:"8px", fontSize:12, fontWeight:600, borderRadius:8, border:"none", cursor:"pointer", minHeight:36, background:showMap===val?T.accent:T.accentBg, color:showMap===val?"#fff":T.textSub }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 지도 / 안내 영역 */}
+          {/* 지도 영역 */}
           <div style={{flex:1, position:"relative", overflow:"hidden"}}>
-            {showMap ? (
-              <div ref={mapRef} style={{width:"100%", height:"100%"}}/>
-            ) : (
-              <div style={{ height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10, color:T.textSub }}>
-                <div style={{fontSize:48}}>🔍</div>
-                <div style={{fontSize:15, fontWeight:700, color:T.textSub}}>위에서 장소를 검색하세요</div>
-                <div style={{fontSize:13, color:T.textMuted, textAlign:"center", lineHeight:1.7}}>검색 결과에서 선택하거나<br/>"지도에서 직접 선택"을 눌러보세요</div>
-              </div>
-            )}
+            <div ref={mapRef} style={{width:"100%", height:"100%"}}/>
             {/* 선택 위치 말풍선 */}
-            {showMap && selectedPlace && (
+            {selectedPlace && (
               <div style={{ position:"absolute", bottom:90, left:16, right:16, background:T.card, borderRadius:14, padding:"12px 16px", boxShadow:"0 4px 20px rgba(0,0,0,0.12)", border:`1px solid ${T.border}` }}>
                 <div style={{fontSize:11, color:T.accent, fontWeight:700, marginBottom:3}}>📍 선택한 위치</div>
                 <div style={{fontSize:14, fontWeight:700, color:T.text}}>{selectedPlace.name}</div>
@@ -564,6 +519,136 @@
     }
 
     // ========================================================
+    // 📊 WeeklyAISummary — 최근 7일 일기 자동 AI 분석 카드
+    // ========================================================
+    function WeeklyAISummary({ diaries }) {
+      const [summary, setSummary] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [expanded, setExpanded] = useState(false);
+      const [generated, setGenerated] = useState(false);
+
+      const last7 = diaries.filter(d => {
+        const days = Math.floor((new Date() - new Date(d.date + "T00:00:00")) / 86400000);
+        return days < 7;
+      });
+
+      const generate = useCallback(async () => {
+        if (last7.length === 0 || loading) return;
+        setLoading(true); setExpanded(true);
+        const ctx = last7.map(d =>
+          `[${d.date}] 제목: ${d.title} / 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")} / 활동: ${(d.activities||[]).join(", ")||"없음"} / 일기 내용: ${(d.content||"").slice(0,80)}`
+        ).join("\n");
+        const prompt = `당신은 따뜻하고 공감 능력이 뛰어난 감정 분석 AI입니다. 아래는 사용자의 최근 7일간 일기입니다.\n\n${ctx}\n\n다음 형식으로 분석해주세요 (이모지 활용, 친근하고 따뜻한 말투, 각 항목 2-3문장):\n\n💜 이번 주 감정의 흐름\n(어떤 감정이 주를 이뤘는지, 전반적인 감정 변화 흐름을 공감하며 분석)\n\n🏃 많이 한 활동\n(어떤 활동을 많이 했는지, 그것이 기분에 어떤 영향을 줬는지)\n\n🌱 AI의 한마디\n(따뜻한 응원 메시지. 단, 슬픔·분노·불안·외로움이 주를 이루면 전문 상담을 부드럽게 제안해줄 것)`;
+        const text = await callGemini(prompt);
+        setSummary(text); setLoading(false); setGenerated(true);
+      }, [last7.length]);
+
+      useEffect(() => {
+        if (last7.length > 0 && !generated && !loading) generate();
+      }, [diaries.length]);
+
+      if (last7.length === 0) return null;
+
+      return (
+        <div style={{ background:"linear-gradient(135deg,#4A3728,#7A5C44)", borderRadius:16, padding:"16px 18px", marginBottom:14, color:"#fff", boxShadow:"0 4px 20px rgba(74,55,40,0.3)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div>
+              <div style={{ fontSize:14, fontWeight:800, marginBottom:2 }}>✨ 이번 주 나의 결</div>
+              <div style={{ fontSize:11, opacity:0.75 }}>최근 7일 AI 분석 · {last7.length}개 일기</div>
+            </div>
+            <button
+              onClick={() => generated ? setExpanded(e=>!e) : generate()}
+              style={{ background:"rgba(255,255,255,0.18)", border:"none", borderRadius:10, padding:"7px 13px", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", minHeight:34, opacity:loading?0.7:1 }}>
+              {loading ? "분석 중..." : expanded ? "접기 ▲" : "펼치기 ▼"}
+            </button>
+          </div>
+          {loading && (
+            <div style={{ marginTop:14, fontSize:13, opacity:0.85, textAlign:"center", padding:"8px 0" }}>🤖 AI가 일기를 읽고 있어요...</div>
+          )}
+          {summary && expanded && (
+            <div style={{ marginTop:14, fontSize:13, lineHeight:1.85, whiteSpace:"pre-line", opacity:0.95, borderTop:"1px solid rgba(255,255,255,0.2)", paddingTop:14 }}>{summary}</div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================================
+    // 🤖 DiaryAIModal — 일기 1개 AI 분석 바텀시트
+    // ========================================================
+    function DiaryAIModal({ diary, onClose, onAnalysisSaved }) {
+      const [analysis, setAnalysis] = useState(diary.ai_analysis || null);
+      const [loading, setLoading] = useState(!diary.ai_analysis);
+      const [cached, setCached] = useState(!!diary.ai_analysis);
+
+      useEffect(() => {
+        if (diary.ai_analysis) return; // 이미 저장된 분석 있으면 API 호출 안 함
+        (async () => {
+          const ctx = `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${diary.content||""}\n감정: ${(diary.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}\n활동: ${(diary.activities||[]).join(", ")||"없음"}\n방문 장소: ${(diary.places||[]).map(p=>p.name).join(", ")||"없음"}\n지출: ${(diary.payments||[]).map(p=>`${p.store} ${p.amount}원`).join(", ")||"없음"}`;
+          const prompt = `당신은 따뜻하고 공감 능력이 뛰어난 감정 분석 AI입니다. 아래 하루 일기를 분석해서 사용자에게 친근하고 따뜻하게 이야기해주세요.\n\n${ctx}\n\n다음 형식으로 분석해주세요 (이모지 활용, 친근한 말투, 각 항목 2-3문장):\n\n💜 오늘의 감정 분석\n(느낀 감정의 의미와 가능한 원인을 공감하며 분석)\n\n✨ 오늘의 하이라이트\n(일기에서 좋았던 점, 의미 있었던 순간 찾아주기)\n\n🌱 내일을 위한 한마디\n(격려와 따뜻한 조언. 부정적 감정이 강하면 전문 상담도 부드럽게 소개)`;
+          const text = await callGemini(prompt);
+          setAnalysis(text);
+          setLoading(false);
+          // Supabase에 분석 결과 저장
+          const { error } = await sb.from('diary_entries').update({ ai_analysis: text }).eq('id', diary.id);
+          if (!error && onAnalysisSaved) onAnalysisSaved(diary.id, text);
+        })();
+      }, []);
+
+      return (
+        <div style={{ position:"fixed", inset:0, background:"rgba(74,55,40,0.6)", zIndex:250, display:"flex", flexDirection:"column", justifyContent:"flex-end" }} onClick={onClose}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:T.card, borderRadius:"20px 20px 0 0", maxHeight:"82vh", display:"flex", flexDirection:"column", boxShadow:"0 -8px 40px rgba(0,0,0,0.18)", paddingBottom:`env(safe-area-inset-bottom,0px)` }}>
+            <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#4A3728,#7A5C44)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🤖</div>
+                <div>
+                  <div style={{ fontSize:15, fontWeight:700, color:T.text }}>AI 일기 분석</div>
+                  <div style={{ fontSize:11, color:T.textSub, marginTop:1, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {diary.title}
+                    {cached && <span style={{ marginLeft:6, background:"#e8f5e9", color:"#2e7d32", borderRadius:6, padding:"1px 6px", fontSize:10, fontWeight:700 }}>저장됨</span>}
+                  </div>
+                </div>
+              </div>
+              <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:T.textSub, minWidth:44, minHeight:44, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+            </div>
+            <div style={{ flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:20 }}>
+              {loading ? (
+                <div style={{ textAlign:"center", padding:"50px 0", color:T.textSub }}>
+                  <div style={{ fontSize:44, marginBottom:14, animation:"pulse 1.5s infinite" }}>🤖</div>
+                  <div style={{ fontSize:14, fontWeight:600, color:T.text, marginBottom:6 }}>AI가 일기를 읽고 있어요</div>
+                  <div style={{ fontSize:12, opacity:0.7 }}>잠시만 기다려주세요...</div>
+                </div>
+              ) : (
+                <div style={{ fontSize:14, lineHeight:1.9, color:T.text, whiteSpace:"pre-line" }}>{analysis}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================================
+    // 🗺️ NaverMapView — 저장된 좌표를 네이버 지도로 표시
+    // ========================================================
+    function NaverMapView({ lat, lng }) {
+      const divRef = useRef(null);
+      useEffect(() => {
+        if (!divRef.current || !window.naver?.maps || !lat || !lng) return;
+        const ll = new window.naver.maps.LatLng(lat, lng);
+        const map = new window.naver.maps.Map(divRef.current, {
+          center: ll,
+          zoom: 17,
+          mapDataControl: false,
+          scaleControl: false,
+          mapTypeControl: false,
+        });
+        new window.naver.maps.Marker({ position: ll, map });
+      }, [lat, lng]);
+
+      if (!lat || !lng) return null;
+      return <div ref={divRef} style={{ width:"100%", height:200 }} />;
+    }
+
+    // ========================================================
     // 📖 DiaryDetail — 장소 표시 시 address 필드도 보여줌
     // ========================================================
     function DiaryDetail({diary, onBack}) {
@@ -615,11 +700,11 @@
                       </div>
                       {p.isFirst && <span style={{padding:"2px 8px", borderRadius:8, background:"#E8F5E9", color:"#4CAF50", fontSize:10, fontWeight:700, flexShrink:0}}>첫 방문</span>}
                     </div>
-                    <div style={{borderRadius:12, overflow:"hidden", border:`1px solid ${T.border}`}}>
-                      <iframe title={p.name} width="100%" height="200"
-                        style={{border:"none", display:"block"}} loading="lazy" allowFullScreen
-                        src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${encodeURIComponent(p.name+(p.address?" "+p.address:""))}&language=ko`}/>
-                    </div>
+                    {p.lat && p.lng && (
+                      <div style={{borderRadius:12, overflow:"hidden", border:`1px solid ${T.border}`}}>
+                        <NaverMapView lat={p.lat} lng={p.lng} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -761,6 +846,12 @@
       const [sd, setSd] = useState(""); const [ed, setEd] = useState("");
       const [savedToast, setSavedToast] = useState(false);
       const [showEditConfirm, setShowEditConfirm] = useState(false);
+      const [aiDiary, setAiDiary] = useState(null);
+
+      // AI 분석 결과 저장 후 로컬 state 업데이트 (재로드 없이)
+      const handleAnalysisSaved = useCallback((diaryId, text) => {
+        setDiaries(prev => prev.map(d => d.id === diaryId ? { ...d, ai_analysis: text } : d));
+      }, []);
 
       const loadDiaries = useCallback(async () => {
         setDbLoading(true);
@@ -817,6 +908,7 @@
             {mainTab==="diary" && (
               <div style={{padding:"16px 16px 12px"}}>
                 {dbLoading ? (<div style={{textAlign:"center", padding:40, color:T.textSub}}><div style={{fontSize:14}}>일기를 불러오는 중...</div></div>) : (<>
+                  <WeeklyAISummary diaries={diaries}/>
                   {streak>0 && (<div style={{background:T.gradient, borderRadius:14, padding:"14px 18px", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"space-between", color:"#fff"}}><div><div style={{fontSize:14, fontWeight:700}}>🔥 {streak}일째 나를 들여다보는 중</div><div style={{fontSize:11, opacity:0.85, marginTop:1}}>매일 쌓이는 기록이 결을 만들어요</div></div><div style={{fontSize:28, fontWeight:800}}>{streak}</div></div>)}
                   <button onClick={()=>{if(todayWritten) setShowEditConfirm(true); else setWriting(true);}}
                     style={{width:"100%", padding:16, borderRadius:14, border:"none", background:todayWritten?T.border:T.gradient, color:todayWritten?T.textSub:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:16, minHeight:52, boxShadow:todayWritten?"none":`0 4px 16px ${T.accent}44`, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}>
@@ -827,17 +919,25 @@
                     {filtered.map(d=>{
                       const total=(d.payments||[]).reduce((s,p)=>s+p.amount,0);
                       return (
-                        <div key={d.id} onClick={()=>setSelected(d)} style={{background:T.card, borderRadius:16, padding:"16px 18px", cursor:"pointer", boxShadow:T.shadow, border:"1px solid transparent"}}>
-                          <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
-                            <div style={{display:"flex", alignItems:"center", gap:6}}><span style={{fontSize:12, color:T.textSub}}>{fmt(d.date)}</span>{isToday(d.date)&&<span style={{background:T.accent, color:"#fff", padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700}}>TODAY</span>}</div>
-                            {total>0&&<span style={{fontSize:13, fontWeight:600, color:T.accent, flexShrink:0}}>{money(total)}</span>}
+                        <div key={d.id} style={{background:T.card, borderRadius:16, padding:"16px 18px", boxShadow:T.shadow, border:"1px solid transparent"}}>
+                          <div onClick={()=>setSelected(d)} style={{cursor:"pointer"}}>
+                            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
+                              <div style={{display:"flex", alignItems:"center", gap:6}}><span style={{fontSize:12, color:T.textSub}}>{fmt(d.date)}</span>{isToday(d.date)&&<span style={{background:T.accent, color:"#fff", padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700}}>TODAY</span>}</div>
+                              {total>0&&<span style={{fontSize:13, fontWeight:600, color:T.accent, flexShrink:0}}>{money(total)}</span>}
+                            </div>
+                            <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:8, lineHeight:1.4}}>{d.title}</div>
+                            <div style={{display:"flex", flexWrap:"wrap", gap:5, marginBottom:6}}>
+                              {(d.emotions||[]).map(e=>EMOTIONS[e.key]?(<span key={e.key} style={{padding:"4px 10px", borderRadius:12, background:EMOTIONS[e.key].color+"22", fontSize:12, color:T.text, fontWeight:500}}>{EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label}</span>):null)}
+                            </div>
+                            <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
+                              {(d.places||[]).map((p,i)=>(<span key={i} style={{fontSize:11, color:T.textSub}}>📍 {p.name}</span>))}
+                            </div>
                           </div>
-                          <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:8, lineHeight:1.4}}>{d.title}</div>
-                          <div style={{display:"flex", flexWrap:"wrap", gap:5, marginBottom:6}}>
-                            {(d.emotions||[]).map(e=>EMOTIONS[e.key]?(<span key={e.key} style={{padding:"4px 10px", borderRadius:12, background:EMOTIONS[e.key].color+"22", fontSize:12, color:T.text, fontWeight:500}}>{EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label}</span>):null)}
-                          </div>
-                          <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                            {(d.places||[]).map((p,i)=>(<span key={i} style={{fontSize:11, color:T.textSub}}>📍 {p.name}</span>))}
+                          <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`}}>
+                            <button onClick={e=>{e.stopPropagation(); setAiDiary(d);}}
+                              style={{width:"100%", padding:"8px 0", border:`1px solid ${T.accentLight}`, borderRadius:10, background:T.accentBg, color:T.accent, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5, minHeight:36}}>
+                              🤖 AI 분석 보기
+                            </button>
                           </div>
                         </div>
                       );
@@ -884,6 +984,7 @@
           )}
 
           {showAI && <AIChatModal onClose={()=>setShowAI(false)} diaries={diaries}/>}
+          {aiDiary && <DiaryAIModal diary={aiDiary} onClose={()=>setAiDiary(null)} onAnalysisSaved={handleAnalysisSaved}/>}
 
           {showEditConfirm && (
             <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.5)", zIndex:200, display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={()=>setShowEditConfirm(false)}>
