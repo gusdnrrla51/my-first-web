@@ -40,6 +40,20 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // 네이버 지역 검색 — /api/search-places (Vercel Serverless) 경유
+    // 키는 서버 환경변수에만 있으므로 브라우저에 노출되지 않음
+    async function naverSearchPlaces(query) {
+      try {
+        const res = await fetch(`/api/search-places?query=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        return (data.items || []).map(item => ({
+          name:    item.title.replace(/<[^>]+>/g, ""),
+          address: item.roadAddress || item.address,
+          lat:     parseFloat(item.mapy) / 10000000,
+          lng:     parseFloat(item.mapx) / 10000000,
+        }));
+      } catch { return []; }
+    }
 
     // ========================================================
     // 🤖 Gemini AI 헬퍼 (Supabase Edge Function 경유 - API 키 서버에서 관리)
