@@ -41,22 +41,11 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs';
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ✅ [추가] 네이버 지도 설정
-    const NAVER_CLIENT_ID     = "3mv25em56b";
-    const NAVER_CLIENT_SECRET = "AIzaSyB1bZ0YXkYuW44sMWmWqEKk7H-X6YWPv-0";
-    const CORS_PROXY          = "https://corsproxy.io/?";
-
-    // 네이버 지역 검색 — 상호명 검색 (CORS 프록시 경유)
-    // ⚠️ 실서비스에서는 백엔드 라우트로 교체할 것
+    // 네이버 지역 검색 — /api/search-places (Vercel Serverless) 경유
+    // 키는 서버 환경변수에만 있으므로 브라우저에 노출되지 않음
     async function naverSearchPlaces(query) {
-      const apiUrl = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5`;
       try {
-        const res = await fetch(`${CORS_PROXY}${encodeURIComponent(apiUrl)}`, {
-          headers: {
-            "X-Naver-Client-Id": NAVER_CLIENT_ID,
-            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-          },
-        });
+        const res = await fetch(`/api/search-places?query=${encodeURIComponent(query)}`);
         const data = await res.json();
         return (data.items || []).map(item => ({
           name:    item.title.replace(/<[^>]+>/g, ""),
