@@ -530,34 +530,30 @@
       const [summary, setSummary] = useState(null);
       const [loading, setLoading] = useState(false);
       const [expanded, setExpanded] = useState(false);
-      const [generated, setGenerated] = useState(false);
 
+      // cacheKey가 바뀔 때만 실행 — 캐시 있으면 바로 표시, 없으면 API 호출
       useEffect(() => {
+        if (last7.length === 0) return;
         try {
           const hit = localStorage.getItem(cacheKey);
-          if (hit) { setSummary(hit); setGenerated(true); setExpanded(true); }
-          else { setSummary(null); setGenerated(false); }
+          if (hit) { setSummary(hit); setExpanded(true); return; }
         } catch {}
+        // 캐시 없으면 생성
+        setSummary(null);
+        (async () => {
+          setLoading(true); setExpanded(true);
+          const ctx = last7.map(d =>
+            `[${d.date}] 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"} / 활동: ${(d.activities||[]).join(", ")||"없음"}`
+          ).join("\n");
+          const prompt = `아래 최근 7일 일기를 따뜻하게 분석해주세요. 전체 5줄 이내로 간결하게.\n\n${ctx}\n\n💜 이번 주 감정 흐름 한 줄\n🏃 많이 한 활동 한 줄\n🌱 한마디 응원 (슬픔·불안이 주를 이루면 전문 상담 부드럽게 제안)`;
+          try {
+            const text = await callGemini(prompt);
+            setSummary(text);
+            try { localStorage.setItem(cacheKey, text); } catch {}
+          } catch {}
+          setLoading(false);
+        })();
       }, [cacheKey]);
-
-      const generate = useCallback(async () => {
-        if (last7.length === 0 || loading) return;
-        setLoading(true); setExpanded(true);
-        const ctx = last7.map(d =>
-          `[${d.date}] 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"} / 활동: ${(d.activities||[]).join(", ")||"없음"}`
-        ).join("\n");
-        const prompt = `아래 최근 7일 일기를 따뜻하게 분석해주세요. 전체 5줄 이내로 간결하게.\n\n${ctx}\n\n💜 이번 주 감정 흐름 한 줄\n🏃 많이 한 활동 한 줄\n🌱 한마디 응원 (슬픔·불안이 주를 이루면 전문 상담 부드럽게 제안)`;
-        try {
-          const text = await callGemini(prompt);
-          setSummary(text);
-          try { localStorage.setItem(cacheKey, text); } catch {}
-        } catch {}
-        setLoading(false); setGenerated(true);
-      }, [cacheKey, last7.length]);
-
-      useEffect(() => {
-        if (last7.length > 0 && !generated && !loading) generate();
-      }, [diaries.length, generated]);
 
       if (last7.length === 0) return null;
 
@@ -569,7 +565,7 @@
               <div style={{ fontSize:11, opacity:0.75 }}>최근 7일 AI 분석 · {last7.length}개 일기</div>
             </div>
             <button
-              onClick={() => generated ? setExpanded(e=>!e) : generate()}
+              onClick={() => setExpanded(e=>!e)}
               style={{ background:"rgba(255,255,255,0.18)", border:"none", borderRadius:10, padding:"7px 13px", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", minHeight:34, opacity:loading?0.7:1 }}>
               {loading ? "분석 중..." : expanded ? "접기 ▲" : "펼치기 ▼"}
             </button>
