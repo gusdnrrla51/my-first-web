@@ -45,14 +45,16 @@
     async function naverSearchPlaces(query) {
       try {
         const res = await fetch(`https://my-first-web-eta.vercel.app/api/search-places?query=${encodeURIComponent(query)}`);
+        if (!res.ok) { console.error("search-places API error:", res.status); return []; }
         const data = await res.json();
+        console.log("search-places response:", data);
         return (data.items || []).map(item => ({
           name:    item.title.replace(/<[^>]+>/g, ""),
           address: item.roadAddress || item.address,
           lat:     parseFloat(item.mapy) / 10000000,
           lng:     parseFloat(item.mapx) / 10000000,
         }));
-      } catch { return []; }
+      } catch(e) { console.error("naverSearchPlaces error:", e); return []; }
     }
 
     // ========================================================
@@ -93,18 +95,49 @@
       danger:"#C97064", success:"#8DB580",
     };
 
-    const EMOTIONS = {
-      happy:{emoji:"😊",label:"행복",color:"#E8A87C"},
-      sad:{emoji:"😢",label:"슬픔",color:"#8BA4B8"},
-      angry:{emoji:"😠",label:"분노",color:"#C97064"},
-      anxious:{emoji:"😰",label:"불안",color:"#A688B0"},
-      peaceful:{emoji:"😌",label:"평온",color:"#8DB580"},
-      excited:{emoji:"🤩",label:"설렘",color:"#D4897C"},
-      tired:{emoji:"😴",label:"피곤",color:"#A0998E"},
-      grateful:{emoji:"🥰",label:"감사",color:"#C4A265"},
-      lonely:{emoji:"🥺",label:"외로움",color:"#9678A0"},
-      proud:{emoji:"💪",label:"뿌듯",color:"#C49555"},
-    };
+    // NVC 느낌말 기반 감정 카테고리
+    const EMOTION_CATEGORIES = [
+      { label:"욕구가 충족되었을 때", groups: [
+        { group:"감동·감사", color:"#C4A265", emotions: [
+          {key:"moved",emoji:"🥹",label:"감동받은"}, {key:"grateful",emoji:"🥰",label:"감사한"}, {key:"fulfilled",emoji:"😇",label:"충만한"}, {key:"ecstatic",emoji:"🤩",label:"황홀한"},
+        ]},
+        { group:"기쁨·즐거움", color:"#E8A87C", emotions: [
+          {key:"happy",emoji:"😊",label:"행복한"}, {key:"joyful",emoji:"😄",label:"즐거운"}, {key:"excited",emoji:"🎉",label:"신나는"}, {key:"fun",emoji:"😆",label:"재미있는"},
+        ]},
+        { group:"따뜻함·친근함", color:"#D4897C", emotions: [
+          {key:"warm",emoji:"🤗",label:"따뜻한"}, {key:"loving",emoji:"💕",label:"사랑하는"}, {key:"cozy",emoji:"☺️",label:"포근한"}, {key:"tender",emoji:"🥲",label:"애틋한"},
+        ]},
+        { group:"만족·편안함", color:"#8DB580", emotions: [
+          {key:"proud",emoji:"💪",label:"뿌듯한"}, {key:"satisfied",emoji:"😌",label:"만족스런"}, {key:"relieved",emoji:"😮‍💨",label:"후련한"}, {key:"peaceful",emoji:"🍃",label:"편안한"}, {key:"calm",emoji:"🧘",label:"차분한"},
+        ]},
+        { group:"활기·자신감", color:"#C49555", emotions: [
+          {key:"energetic",emoji:"⚡",label:"활기찬"}, {key:"confident",emoji:"😎",label:"자신감 있는"}, {key:"hopeful",emoji:"✨",label:"기대에 부푼"}, {key:"brave",emoji:"🦁",label:"용기 나는"},
+        ]},
+      ]},
+      { label:"욕구가 충족되지 않았을 때", groups: [
+        { group:"두려움·불안", color:"#A688B0", emotions: [
+          {key:"anxious",emoji:"😰",label:"불안한"}, {key:"worried",emoji:"😟",label:"걱정되는"}, {key:"scared",emoji:"😨",label:"두려운"}, {key:"nervous",emoji:"😬",label:"긴장한"},
+        ]},
+        { group:"불편·난처", color:"#B8956A", emotions: [
+          {key:"uncomfortable",emoji:"😣",label:"불편한"}, {key:"frustrated",emoji:"😤",label:"답답한"}, {key:"confused",emoji:"😵‍💫",label:"혼란스러운"}, {key:"embarrassed",emoji:"😳",label:"창피한"},
+        ]},
+        { group:"슬픔·서운함", color:"#8BA4B8", emotions: [
+          {key:"sad",emoji:"😢",label:"슬픈"}, {key:"missing",emoji:"🥺",label:"그리운"}, {key:"disappointed",emoji:"😞",label:"서운한"}, {key:"heartbroken",emoji:"💔",label:"안타까운"},
+        ]},
+        { group:"외로움·무력감", color:"#9678A0", emotions: [
+          {key:"lonely",emoji:"🌙",label:"외로운"}, {key:"empty",emoji:"🕳️",label:"공허한"}, {key:"depressed",emoji:"🌧️",label:"우울한"}, {key:"helpless",emoji:"😶",label:"무력한"},
+        ]},
+        { group:"피로·화", color:"#C97064", emotions: [
+          {key:"tired",emoji:"😴",label:"피곤한"}, {key:"bored",emoji:"🥱",label:"지겨운"}, {key:"angry",emoji:"😠",label:"화나는"}, {key:"upset",emoji:"🤯",label:"속상한"},
+        ]},
+      ]},
+    ];
+
+    // 플랫 맵 — 기존 코드 호환용
+    const EMOTIONS = {};
+    EMOTION_CATEGORIES.forEach(cat => cat.groups.forEach(g => g.emotions.forEach(e => {
+      EMOTIONS[e.key] = { emoji: e.emoji, label: e.label, color: g.color };
+    })));
     const EMO_KEYS = Object.keys(EMOTIONS);
     const ACTIVITIES = ["🏃 운동","📚 독서","🎵 음악","🍳 요리","🎮 게임","☕ 카페","🎬 영화","💻 코딩","🧘 명상","📸 사진","🛒 쇼핑","👥 모임","🚶 산책","🏠 집"];
     const INTENSITY = ["약함","보통","강함","매우 강함"];
@@ -263,6 +296,7 @@
       const [results, setResults]           = useState([]);
       const [selectedPlace, setSelectedPlace] = useState(null);
       const [hasSearched, setHasSearched]   = useState(false);
+      const [searchError, setSearchError]   = useState("");
 
       // results를 ref에도 동기화 (마커 클릭 클로저에서 최신 값 참조용)
       useEffect(() => { resultsRef.current = results; }, [results]);
@@ -336,6 +370,7 @@
         setSearching(true);
         setSelectedPlace(null);
         setHasSearched(true);
+        setSearchError("");
         try {
           const items = await naverSearchPlaces(q);
           setResults(items);
@@ -353,8 +388,13 @@
             } else {
               mapInst.current.fitBounds(bounds, { top:80, bottom:200, left:40, right:40 });
             }
+          } else if (items.length === 0) {
+            setSearchError("검색 결과가 없습니다. 다른 키워드로 검색해보세요.");
           }
-        } catch { setResults([]); }
+        } catch(e) {
+          setResults([]);
+          setSearchError("검색 중 오류가 발생했습니다. 지도를 직접 눌러 선택해주세요.");
+        }
         setSearching(false);
       };
 
@@ -408,52 +448,21 @@
             </div>
           </div>
 
-          {/* 지도 + 결과 리스트 영역 */}
-          <div style={{flex:1, position:"relative", overflow:"hidden", display:"flex", flexDirection:"column"}}>
-            {/* 지도 */}
-            <div ref={mapRef} style={{flex:1, minHeight:0}}/>
+          {/* 지도 영역 */}
+          <div style={{flex:1, position:"relative", overflow:"hidden"}}>
+            <div ref={mapRef} style={{width:"100%", height:"100%"}}/>
 
-            {/* 검색 결과 리스트 (지도 위에 하단 오버레이) */}
-            {results.length > 0 && (
-              <div style={{ position:"absolute", bottom:0, left:0, right:0, maxHeight:"45%", background:T.card, borderTop:`1px solid ${T.border}`, borderRadius:"18px 18px 0 0", boxShadow:"0 -4px 20px rgba(0,0,0,0.1)", overflow:"hidden", display:"flex", flexDirection:"column" }}>
-                {/* 드래그 핸들 */}
-                <div style={{display:"flex", justifyContent:"center", padding:"10px 0 6px"}}>
-                  <div style={{width:36, height:4, borderRadius:2, background:T.border}}/>
-                </div>
-                <div style={{fontSize:12, color:T.textSub, fontWeight:600, padding:"0 16px 8px"}}>{results.length}개 검색 결과</div>
-                {/* 리스트 */}
-                <div style={{overflowY:"auto", padding:"0 12px 12px", flex:1}}>
-                  {results.map((p, i) => {
-                    const isSel = selectedPlace && selectedPlace.lat === p.lat && selectedPlace.lng === p.lng;
-                    return (
-                      <button key={i} onClick={()=>selectFromList(p)}
-                        style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:"12px 14px", marginBottom:4, background: isSel ? T.accentBg : "transparent", border: isSel ? `1.5px solid ${T.accent}` : `1.5px solid transparent`, borderRadius:12, cursor:"pointer", textAlign:"left", transition:"all 0.15s" }}>
-                        <div style={{ width:32, height:32, borderRadius:"50%", background: isSel ? T.accent : T.border, display:"flex", alignItems:"center", justifyContent:"center", color: isSel ? "#fff" : T.textSub, fontSize:14, fontWeight:700, flexShrink:0 }}>
-                          {i + 1}
-                        </div>
-                        <div style={{overflow:"hidden", flex:1}}>
-                          <div style={{fontSize:14, fontWeight:600, color: isSel ? T.accent : T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p.name}</div>
-                          <div style={{fontSize:12, color:T.textSub, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p.address}</div>
-                        </div>
-                        {isSel && <span style={{fontSize:16, color:T.accent, flexShrink:0}}>✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* 검색 결과 없음 */}
-            {hasSearched && !searching && results.length === 0 && (
-              <div style={{ position:"absolute", bottom:20, left:16, right:16, background:T.card, borderRadius:14, padding:"16px", boxShadow:"0 4px 20px rgba(0,0,0,0.1)", border:`1px solid ${T.border}`, textAlign:"center" }}>
-                <div style={{fontSize:14, color:T.textSub}}>검색 결과가 없습니다</div>
+            {/* 검색 결과 없음 / 에러 */}
+            {hasSearched && !searching && results.length === 0 && !selectedPlace && (
+              <div style={{ position:"absolute", bottom:16, left:16, right:16, background:T.card, borderRadius:14, padding:"16px", boxShadow:"0 4px 20px rgba(0,0,0,0.1)", border:`1px solid ${T.border}`, textAlign:"center" }}>
+                <div style={{fontSize:14, color:T.textSub}}>{searchError || "검색 결과가 없습니다"}</div>
                 <div style={{fontSize:12, color:T.textMuted, marginTop:4}}>지도를 직접 눌러 장소를 선택할 수도 있어요</div>
               </div>
             )}
 
             {/* 선택된 장소 (리스트가 없을 때 — 지도 직접 클릭) */}
             {selectedPlace && results.length === 0 && (
-              <div style={{ position:"absolute", bottom:20, left:16, right:16, background:T.card, borderRadius:14, padding:"12px 16px", boxShadow:"0 4px 20px rgba(0,0,0,0.12)", border:`1px solid ${T.border}` }}>
+              <div style={{ position:"absolute", bottom:16, left:16, right:16, background:T.card, borderRadius:14, padding:"12px 16px", boxShadow:"0 4px 20px rgba(0,0,0,0.12)", border:`1px solid ${T.border}` }}>
                 <div style={{fontSize:11, color:T.accent, fontWeight:700, marginBottom:3}}>📍 선택한 위치</div>
                 <div style={{fontSize:14, fontWeight:700, color:T.text}}>{selectedPlace.name}</div>
                 <div style={{fontSize:12, color:T.textSub, marginTop:2}}>{selectedPlace.address}</div>
@@ -461,15 +470,46 @@
             )}
           </div>
 
-          {/* 하단 확인 버튼 */}
-          {selectedPlace && (
-            <div style={{ background:T.card, padding:"14px 16px", borderTop:`1px solid ${T.border}`, paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 14px)`, flexShrink:0 }}>
-              <button onClick={()=>onSelect(selectedPlace)}
-                style={{ width:"100%", padding:15, background:T.gradient, color:"#fff", border:"none", borderRadius:14, fontSize:16, fontWeight:700, cursor:"pointer", minHeight:52 }}>
-                이 장소로 기록하기 ✓
-              </button>
-            </div>
-          )}
+          {/* 하단 영역: 결과 리스트 + 확인 버튼 (항상 화면 내에 위치) */}
+          <div style={{ flexShrink:0, background:T.card, borderTop:`1px solid ${T.border}`, paddingBottom:`env(safe-area-inset-bottom, 0px)` }}>
+            {/* 검색 결과 리스트 */}
+            {results.length > 0 && (
+              <div style={{ maxHeight:"35vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+                <div style={{display:"flex", justifyContent:"center", padding:"8px 0 4px"}}>
+                  <div style={{width:36, height:4, borderRadius:2, background:T.border}}/>
+                </div>
+                <div style={{fontSize:12, color:T.textSub, fontWeight:600, padding:"0 16px 6px"}}>{results.length}개 검색 결과</div>
+                <div style={{overflowY:"auto", padding:"0 12px 8px", flex:1}}>
+                  {results.map((p, i) => {
+                    const isSel = selectedPlace && selectedPlace.lat === p.lat && selectedPlace.lng === p.lng;
+                    return (
+                      <button key={i} onClick={()=>selectFromList(p)}
+                        style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 12px", marginBottom:3, background: isSel ? T.accentBg : "transparent", border: isSel ? `1.5px solid ${T.accent}` : `1.5px solid transparent`, borderRadius:12, cursor:"pointer", textAlign:"left", transition:"all 0.15s" }}>
+                        <div style={{ width:28, height:28, borderRadius:"50%", background: isSel ? T.accent : T.border, display:"flex", alignItems:"center", justifyContent:"center", color: isSel ? "#fff" : T.textSub, fontSize:13, fontWeight:700, flexShrink:0 }}>
+                          {i + 1}
+                        </div>
+                        <div style={{overflow:"hidden", flex:1}}>
+                          <div style={{fontSize:13, fontWeight:600, color: isSel ? T.accent : T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p.name}</div>
+                          <div style={{fontSize:11, color:T.textSub, marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p.address}</div>
+                        </div>
+                        {isSel && <span style={{fontSize:15, color:T.accent, flexShrink:0}}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 확인 버튼 */}
+            {selectedPlace && (
+              <div style={{ padding:"10px 16px 14px" }}>
+                <button onClick={()=>onSelect(selectedPlace)}
+                  style={{ width:"100%", padding:14, background:T.gradient, color:"#fff", border:"none", borderRadius:14, fontSize:15, fontWeight:700, cursor:"pointer", minHeight:48 }}>
+                  이 장소로 기록하기 ✓
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -564,17 +604,27 @@
                 </div>
                 {tab==="emotion" && (<>
                   <div style={{fontSize:12, color:T.textSub, marginBottom:10}}>오늘 느낀 감정을 선택해보세요 (최대 5개)</div>
-                  <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:14}}>
-                    {EMO_KEYS.map(k=>{
-                      const e=EMOTIONS[k]; const sel=selEmotions.find(x=>x.key===k);
-                      return (
-                        <button key={k} onClick={()=>toggleEmo(k)}
-                          style={{padding:"9px 14px", borderRadius:20, border:`1.5px solid ${sel?e.color:T.border}`, background:sel?e.color+"22":T.bg, fontSize:13, cursor:"pointer", color:sel?T.text:T.textSub, fontWeight:sel?600:400, minHeight:40}}>
-                          {e.emoji} {e.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {EMOTION_CATEGORIES.map((cat, ci) => (
+                    <div key={ci} style={{marginBottom:14}}>
+                      <div style={{fontSize:11, fontWeight:700, color:T.accent, marginBottom:8, padding:"4px 0"}}>{cat.label}</div>
+                      {cat.groups.map((g, gi) => (
+                        <div key={gi} style={{marginBottom:10}}>
+                          <div style={{fontSize:11, color:T.textSub, fontWeight:600, marginBottom:5}}>{g.group}</div>
+                          <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
+                            {g.emotions.map(emo => {
+                              const sel = selEmotions.find(x=>x.key===emo.key);
+                              return (
+                                <button key={emo.key} onClick={()=>toggleEmo(emo.key)}
+                                  style={{padding:"7px 12px", borderRadius:20, border:`1.5px solid ${sel?g.color:T.border}`, background:sel?g.color+"22":T.bg, fontSize:12, cursor:"pointer", color:sel?T.text:T.textSub, fontWeight:sel?600:400, minHeight:36}}>
+                                  {emo.emoji} {emo.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                   {selEmotions.length>0 && (
                     <div style={{display:"flex", flexDirection:"column", gap:12}}>
                       {selEmotions.map(e=>(
