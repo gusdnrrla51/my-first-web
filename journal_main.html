@@ -247,30 +247,41 @@
     }
 
     // ========================================================
-    // ✅ [추가] NaverMapPicker — 전체화면 지도 장소 선택기
-    // DiaryWritePage에서 "장소 추가" 버튼 누르면 이 화면이 뜸
+    // ✅ NaverMapPicker — 검색 기반 장소 선택기
+    // 검색 → 핀으로 결과 표시 → 핀/리스트에서 선택
     // onSelect(place) → { name, address, lat, lng }
     // ========================================================
     function NaverMapPicker({ onSelect, onClose }) {
-      const mapRef    = useRef(null);
-      const mapInst   = useRef(null);
-      const markerRef = useRef(null);
+      const mapRef     = useRef(null);
+      const mapInst    = useRef(null);
+      const markersRef  = useRef([]);
+      const searchRef   = useRef(null);
+      const resultsRef  = useRef([]);
 
+      const [query, setQuery]               = useState("");
+      const [searching, setSearching]       = useState(false);
+      const [results, setResults]           = useState([]);
       const [selectedPlace, setSelectedPlace] = useState(null);
+      const [hasSearched, setHasSearched]   = useState(false);
 
-      // 컴포넌트 마운트 시 지도 초기화
+      // results를 ref에도 동기화 (마커 클릭 클로저에서 최신 값 참조용)
+      useEffect(() => { resultsRef.current = results; }, [results]);
+
+      // 지도 초기화
       useEffect(() => {
         if (!mapRef.current || mapInst.current) return;
         if (!window.naver?.maps) return;
         const map = new window.naver.maps.Map(mapRef.current, {
           center: new window.naver.maps.LatLng(37.5665, 126.978),
-          zoom: 15,
+          zoom: 14,
         });
         mapInst.current = map;
-        // 지도 클릭 → ReverseGeocode
+
+        // 지도 클릭 → 역지오코딩 (폴백: 검색 안 하고 직접 지도 클릭도 가능)
         window.naver.maps.Event.addListener(map, "click", e => {
           const ll = e.coord;
-          placeMarker(ll);
+          clearMarkers();
+          addMarker(ll, null, true);
           window.naver.maps.Service.reverseGeocode(
             { coords: ll, orders: [window.naver.maps.Service.OrderType.ROAD_ADDR, window.naver.maps.Service.OrderType.ADDR] },
             (status, response) => {
@@ -279,32 +290,170 @@
               const reg = r.region; const land = r.land;
               const addr = `${reg.area1.name} ${reg.area2.name} ${reg.area3.name} ${land?.name||""} ${land?.number1||""}`.trim();
               setSelectedPlace({ name: addr, address: addr, lat: ll.lat(), lng: ll.lng() });
+              setResults([]);
+              setHasSearched(false);
             }
           );
         });
       }, []);
 
-      const placeMarker = ll => {
-        if (markerRef.current) markerRef.current.setMap(null);
-        markerRef.current = new window.naver.maps.Marker({ position: ll, map: mapInst.current, animation: window.naver.maps.Animation.DROP });
-        mapInst.current.panTo(ll);
+      // 마커 관리
+      const clearMarkers = () => {
+        markersRef.current.forEach(m => m.setMap(null));
+        markersRef.current = [];
       };
+
+      const addMarker = (ll, place, isSelected) => {
+        const marker = new window.naver.maps.Marker({
+          position: ll,
+          map: mapInst.current,
+          animation: window.naver.maps.Animation.DROP,
+          icon: isSelected ? undefined : {
+            content: `<div style="width:28px;height:28px;background:${T.accent};border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>`,
+            anchor: new window.naver.maps.Point(14, 14),
+          },
+        });
+        if (place) {
+          window.naver.maps.Event.addListener(marker, "click", () => {
+            setSelectedPlace(place);
+            // 선택 마커 강조: 전체를 다시 그림
+            clearMarkers();
+            resultsRef.current.forEach(p => {
+              const pos = new window.naver.maps.LatLng(p.lat, p.lng);
+              const isSel = p.lat === place.lat && p.lng === place.lng;
+              addMarker(pos, p, isSel);
+            });
+          });
+        }
+        markersRef.current.push(marker);
+        return marker;
+      };
+
+      // 검색 실행
+      const doSearch = async () => {
+        const q = query.trim();
+        if (!q) return;
+        setSearching(true);
+        setSelectedPlace(null);
+        setHasSearched(true);
+        try {
+          const items = await naverSearchPlaces(q);
+          setResults(items);
+          clearMarkers();
+          if (items.length > 0 && mapInst.current) {
+            const bounds = new window.naver.maps.LatLngBounds();
+            items.forEach(p => {
+              const pos = new window.naver.maps.LatLng(p.lat, p.lng);
+              bounds.extend(pos);
+              addMarker(pos, p, false);
+            });
+            if (items.length === 1) {
+              mapInst.current.setCenter(new window.naver.maps.LatLng(items[0].lat, items[0].lng));
+              mapInst.current.setZoom(16);
+            } else {
+              mapInst.current.fitBounds(bounds, { top:80, bottom:200, left:40, right:40 });
+            }
+          }
+        } catch { setResults([]); }
+        setSearching(false);
+      };
+
+      // 리스트에서 장소 선택
+      const selectFromList = (place) => {
+        setSelectedPlace(place);
+        if (mapInst.current) {
+          mapInst.current.setCenter(new window.naver.maps.LatLng(place.lat, place.lng));
+          mapInst.current.setZoom(16);
+          clearMarkers();
+          results.forEach(p => {
+            const pos = new window.naver.maps.LatLng(p.lat, p.lng);
+            const isSel = p.lat === place.lat && p.lng === place.lng;
+            addMarker(pos, p, isSel);
+          });
+        }
+      };
+
+      // Enter 키 검색
+      const handleKeyDown = (e) => {
+        if (e.key === "Enter") { e.preventDefault(); doSearch(); }
+      };
+
+      // 마운트 시 검색창 포커스
+      useEffect(() => { setTimeout(() => searchRef.current?.focus(), 300); }, []);
 
       return (
         <div style={{ position:"fixed", inset:0, zIndex:300, background:T.bg, display:"flex", flexDirection:"column", fontFamily:"'Noto Sans KR',sans-serif" }}>
-          {/* 헤더 */}
-          <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 16px", paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
-            <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:T.textSub,minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>←</button>
-            <span style={{fontSize:17, fontWeight:700, color:T.text}}>방문 장소 추가</span>
-            <span style={{fontSize:13, color:T.textSub, marginLeft:4}}>지도를 눌러 장소를 선택하세요</span>
+          {/* 헤더 + 검색 */}
+          <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, flexShrink:0 }}>
+            <div style={{ padding:"0 16px", display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+              <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:T.textSub,minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>←</button>
+              <span style={{fontSize:17, fontWeight:700, color:T.text}}>장소 검색</span>
+            </div>
+            {/* 검색바 */}
+            <div style={{ padding:"0 16px", display:"flex", gap:8 }}>
+              <div style={{ flex:1, display:"flex", alignItems:"center", background:T.input, borderRadius:12, border:`1.5px solid ${T.border}`, padding:"0 14px", transition:"border-color 0.2s" }}>
+                <span style={{fontSize:16, color:T.textSub, marginRight:8, flexShrink:0}}>🔍</span>
+                <input ref={searchRef} type="text" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={handleKeyDown}
+                  placeholder="가게, 카페, 회사 이름 검색..."
+                  style={{ flex:1, border:"none", background:"transparent", outline:"none", fontSize:15, color:T.text, padding:"12px 0", fontFamily:"inherit" }} />
+                {query && (
+                  <button onClick={()=>{ setQuery(""); setResults([]); setSelectedPlace(null); setHasSearched(false); clearMarkers(); }}
+                    style={{background:"none",border:"none",fontSize:16,color:T.textSub,cursor:"pointer",padding:4}}>✕</button>
+                )}
+              </div>
+              <button onClick={doSearch} disabled={searching || !query.trim()}
+                style={{ padding:"0 18px", background: (!query.trim() || searching) ? T.border : T.gradient, color:"#fff", border:"none", borderRadius:12, fontSize:14, fontWeight:700, cursor: (!query.trim()||searching)?"default":"pointer", minHeight:48, flexShrink:0, opacity:(!query.trim()||searching)?0.6:1 }}>
+                {searching ? "..." : "검색"}
+              </button>
+            </div>
           </div>
 
-          {/* 지도 영역 */}
-          <div style={{flex:1, position:"relative", overflow:"hidden"}}>
-            <div ref={mapRef} style={{width:"100%", height:"100%"}}/>
-            {/* 선택 위치 말풍선 */}
-            {selectedPlace && (
-              <div style={{ position:"absolute", bottom:90, left:16, right:16, background:T.card, borderRadius:14, padding:"12px 16px", boxShadow:"0 4px 20px rgba(0,0,0,0.12)", border:`1px solid ${T.border}` }}>
+          {/* 지도 + 결과 리스트 영역 */}
+          <div style={{flex:1, position:"relative", overflow:"hidden", display:"flex", flexDirection:"column"}}>
+            {/* 지도 */}
+            <div ref={mapRef} style={{flex:1, minHeight:0}}/>
+
+            {/* 검색 결과 리스트 (지도 위에 하단 오버레이) */}
+            {results.length > 0 && (
+              <div style={{ position:"absolute", bottom:0, left:0, right:0, maxHeight:"45%", background:T.card, borderTop:`1px solid ${T.border}`, borderRadius:"18px 18px 0 0", boxShadow:"0 -4px 20px rgba(0,0,0,0.1)", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+                {/* 드래그 핸들 */}
+                <div style={{display:"flex", justifyContent:"center", padding:"10px 0 6px"}}>
+                  <div style={{width:36, height:4, borderRadius:2, background:T.border}}/>
+                </div>
+                <div style={{fontSize:12, color:T.textSub, fontWeight:600, padding:"0 16px 8px"}}>{results.length}개 검색 결과</div>
+                {/* 리스트 */}
+                <div style={{overflowY:"auto", padding:"0 12px 12px", flex:1}}>
+                  {results.map((p, i) => {
+                    const isSel = selectedPlace && selectedPlace.lat === p.lat && selectedPlace.lng === p.lng;
+                    return (
+                      <button key={i} onClick={()=>selectFromList(p)}
+                        style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:"12px 14px", marginBottom:4, background: isSel ? T.accentBg : "transparent", border: isSel ? `1.5px solid ${T.accent}` : `1.5px solid transparent`, borderRadius:12, cursor:"pointer", textAlign:"left", transition:"all 0.15s" }}>
+                        <div style={{ width:32, height:32, borderRadius:"50%", background: isSel ? T.accent : T.border, display:"flex", alignItems:"center", justifyContent:"center", color: isSel ? "#fff" : T.textSub, fontSize:14, fontWeight:700, flexShrink:0 }}>
+                          {i + 1}
+                        </div>
+                        <div style={{overflow:"hidden", flex:1}}>
+                          <div style={{fontSize:14, fontWeight:600, color: isSel ? T.accent : T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p.name}</div>
+                          <div style={{fontSize:12, color:T.textSub, marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p.address}</div>
+                        </div>
+                        {isSel && <span style={{fontSize:16, color:T.accent, flexShrink:0}}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 검색 결과 없음 */}
+            {hasSearched && !searching && results.length === 0 && (
+              <div style={{ position:"absolute", bottom:20, left:16, right:16, background:T.card, borderRadius:14, padding:"16px", boxShadow:"0 4px 20px rgba(0,0,0,0.1)", border:`1px solid ${T.border}`, textAlign:"center" }}>
+                <div style={{fontSize:14, color:T.textSub}}>검색 결과가 없습니다</div>
+                <div style={{fontSize:12, color:T.textMuted, marginTop:4}}>지도를 직접 눌러 장소를 선택할 수도 있어요</div>
+              </div>
+            )}
+
+            {/* 선택된 장소 (리스트가 없을 때 — 지도 직접 클릭) */}
+            {selectedPlace && results.length === 0 && (
+              <div style={{ position:"absolute", bottom:20, left:16, right:16, background:T.card, borderRadius:14, padding:"12px 16px", boxShadow:"0 4px 20px rgba(0,0,0,0.12)", border:`1px solid ${T.border}` }}>
                 <div style={{fontSize:11, color:T.accent, fontWeight:700, marginBottom:3}}>📍 선택한 위치</div>
                 <div style={{fontSize:14, fontWeight:700, color:T.text}}>{selectedPlace.name}</div>
                 <div style={{fontSize:12, color:T.textSub, marginTop:2}}>{selectedPlace.address}</div>
