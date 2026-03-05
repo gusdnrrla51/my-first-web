@@ -38,6 +38,24 @@
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ========================================================
+    // 📷 사진 signed URL 헬퍼 (private 버킷용)
+    // ========================================================
+    const photoUrlCache = {};
+    async function getPhotoUrl(photoRef) {
+      if (!photoRef) return null;
+      // 이미 full URL(기존 데이터)이면 signed URL로 변환 시도
+      const path = photoRef.startsWith('http')
+        ? photoRef.split('/storage/v1/object/public/diary-photos/')[1] || null
+        : photoRef;
+      if (!path) return photoRef; // 파싱 불가 시 원본 반환
+      if (photoUrlCache[path]) return photoUrlCache[path];
+      const { data, error } = await sb.storage.from('diary-photos').createSignedUrl(path, 3600); // 1시간
+      if (error) { console.error('Signed URL 오류:', error); return null; }
+      photoUrlCache[path] = data.signedUrl;
+      return data.signedUrl;
+    }
+
+    // ========================================================
     // 🤖 Gemini AI 헬퍼 (Supabase Edge Function 경유 - API 키 서버에서 관리)
     // ========================================================
     async function callGemini(prompt) {
@@ -274,8 +292,12 @@
       const [saving, setSaving] = useState(false);
       const [openEmoGroup, setOpenEmoGroup] = useState(null);
       const [photoFile, setPhotoFile] = useState(null);
-      const [photoPreview, setPhotoPreview] = useState(editData?.photo_url||null);
+      const [photoPreview, setPhotoPreview] = useState(null);
       const [newPlace, setNewPlace] = useState("");
+      // 기존 사진이 있으면 signed URL로 미리보기 로드
+      useEffect(() => {
+        if (editData?.photo_url) getPhotoUrl(editData.photo_url).then(setPhotoPreview);
+      }, []);
       const [newPerson, setNewPerson] = useState("");
       const [newPurchase, setNewPurchase] = useState("");
 
@@ -311,7 +333,7 @@
           alert("제목, 내용, 감정을 모두 입력해주세요."); return;
         }
         setSaving(true);
-        let photo_url = photoPreview;
+        let photo_url = !photoPreview ? null : (editData?.photo_url || null); // 미리보기 없으면 사진 삭제, 있으면 기존 경로 유지
         // 새 사진 파일이 있으면 Supabase Storage에 업로드
         if (photoFile) {
           try {
@@ -320,8 +342,7 @@
             const { data: upData, error: upErr } = await sb.storage.from('diary-photos').upload(path, photoFile, { upsert: true });
             if (upErr) { console.error("사진 업로드 오류:", upErr); }
             else {
-              const { data: urlData } = sb.storage.from('diary-photos').getPublicUrl(path);
-              photo_url = urlData?.publicUrl || null;
+              photo_url = path; // private 버킷이므로 경로만 저장, 표시할 때 signed URL 생성
             }
           } catch(e) { console.error("사진 업로드 실패:", e); }
         }
@@ -689,6 +710,10 @@
     // 📖 DiaryDetail
     // ========================================================
     function DiaryDetail({diary, onBack}) {
+      const [signedPhotoUrl, setSignedPhotoUrl] = useState(null);
+      useEffect(() => {
+        if (diary.photo_url) getPhotoUrl(diary.photo_url).then(setSignedPhotoUrl);
+      }, [diary.photo_url]);
       return (
         <div style={{position:"fixed", inset:0, background:T.bg, zIndex:50, display:"flex", flexDirection:"column"}}>
           <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 20px", paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
@@ -753,10 +778,10 @@
                 </div>
               </div>
             )}
-            {diary.photo_url && (
+            {diary.photo_url && signedPhotoUrl && (
               <div style={{background:T.card, borderRadius:16, padding:20, boxShadow:T.shadow}}>
                 <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>📷 오늘의 사진</div>
-                <img src={diary.photo_url} alt="오늘의 사진" style={{width:"100%", borderRadius:12, maxHeight:400, objectFit:"cover"}}/>
+                <img src={signedPhotoUrl} alt="오늘의 사진" style={{width:"100%", borderRadius:12, maxHeight:400, objectFit:"cover"}}/>
               </div>
             )}
           </div>
