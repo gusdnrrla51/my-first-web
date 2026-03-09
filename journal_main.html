@@ -1110,18 +1110,15 @@ ${chatHistory}
     }
 
     // ========================================================
-    // 🧠 MBTI 분석 — 최근 7일 일기 기반
+    // 🧠 MBTI 분석 — 일기 기반 (파일럿: 1개 이상이면 분석 가능)
     // ========================================================
     async function analyzeMBTI(diaries, userId, displayName) {
-      // 최근 7일 일기 필터
-      const now = new Date();
-      const last7 = diaries.filter(d => {
-        const days = Math.floor((now - new Date(d.date + "T00:00:00")) / 86400000);
-        return days < 7;
-      });
-      if (last7.length === 0) return null;
+      // 최신 일기 최대 7개 사용 (1개만 있어도 분석 가능)
+      const sorted = [...diaries].sort((a, b) => b.date.localeCompare(a.date));
+      const recent = sorted.slice(0, 7);
+      if (recent.length === 0) return null;
 
-      const diaryCtx = last7.map(d => {
+      const diaryCtx = recent.map(d => {
         const emos = (d.emotions||[]).map(e => `${EMOTIONS[e.key]?.label||e.key}(강도${e.intensity})`).join(", ") || "없음";
         const acts = (d.activities||[]).join(", ") || "없음";
         const ppl = (d.people||[]).join(", ") || "없음";
@@ -1129,7 +1126,7 @@ ${chatHistory}
         return `[${d.date}]\n제목: ${d.title}\n내용: ${(d.content||"").slice(0,300)}\n감정: ${emos}\n활동: ${acts}\n만난 사람: ${ppl}\n장소: ${places}`;
       }).join("\n\n---\n\n");
 
-      const prompt = `당신은 MBTI 성격유형 분석 전문가입니다. 아래 사용자의 최근 7일간 일기를 분석하여 MBTI를 추측해주세요.
+      const prompt = `당신은 MBTI 성격유형 분석 전문가입니다. 아래 사용자의 일기를 분석하여 MBTI를 추측해주세요. 일기가 적더라도 가능한 단서를 최대한 활용하여 추측하세요.
 
 ## 분석 기준:
 
@@ -1160,7 +1157,7 @@ ${chatHistory}
 - 반드시 아래 JSON 형식으로만 응답:
 {"mbti":"XXXX","confidence":{"E_I":"E 또는 I 선택 이유","S_N":"S 또는 N 선택 이유","T_F":"T 또는 F 선택 이유","J_P":"J 또는 P 선택 이유"}}
 
-## 분석할 일기 (최근 7일):
+## 분석할 일기:
 
 ${diaryCtx}`;
 
@@ -1237,7 +1234,7 @@ ${diaryCtx}`;
           setMbti(result.mbti);
           setConfidence(result.confidence);
         } else {
-          alert("MBTI 분석에 실패했어요. 최근 7일간 일기가 있는지 확인해주세요.");
+          alert("MBTI 분석에 실패했어요. 일기가 있는지 확인해주세요.");
         }
         setAnalyzing(false);
       };
@@ -1272,10 +1269,7 @@ ${diaryCtx}`;
 
       // MBTI 분석 전 상태
       if (!mbti) {
-        const last7count = diaries.filter(d => {
-          const days = Math.floor((new Date() - new Date(d.date + "T00:00:00")) / 86400000);
-          return days < 7;
-        }).length;
+        const diaryCount = diaries.length;
 
         return (
           <div style={{ padding: "30px 16px" }}>
@@ -1286,13 +1280,13 @@ ${diaryCtx}`;
               <div style={{ fontSize: 48, marginBottom: 16 }}>🧠</div>
               <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 8 }}>나의 MBTI를 알아보세요</div>
               <div style={{ fontSize: 14, color: T.textSub, lineHeight: 1.8, marginBottom: 20 }}>
-                최근 7일간의 일기를 AI가 분석하여<br />당신의 MBTI 성격유형을 추측합니다.
+                작성한 일기를 AI가 분석하여<br />당신의 MBTI 성격유형을 추측합니다.
               </div>
               <div style={{ fontSize: 13, color: T.accent, fontWeight: 600, marginBottom: 20, padding: "10px 16px", background: T.accentBg, borderRadius: 12 }}>
-                최근 7일 일기: {last7count}개 {last7count === 0 && "— 일기를 먼저 작성해주세요"}
+                작성한 일기: {diaryCount}개 {diaryCount === 0 && "— 일기를 먼저 작성해주세요"}
               </div>
-              <button onClick={handleAnalyze} disabled={analyzing || last7count === 0}
-                style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: last7count > 0 ? T.gradient : T.border, color: last7count > 0 ? "#fff" : T.textSub, fontSize: 16, fontWeight: 700, cursor: last7count > 0 ? "pointer" : "default", opacity: analyzing ? 0.7 : 1, minHeight: 52 }}>
+              <button onClick={handleAnalyze} disabled={analyzing || diaryCount === 0}
+                style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: diaryCount > 0 ? T.gradient : T.border, color: diaryCount > 0 ? "#fff" : T.textSub, fontSize: 16, fontWeight: 700, cursor: diaryCount > 0 ? "pointer" : "default", opacity: analyzing ? 0.7 : 1, minHeight: 52 }}>
                 {analyzing ? "🤖 AI가 분석 중..." : "나의 결 유형 분석하기"}
               </button>
             </div>
