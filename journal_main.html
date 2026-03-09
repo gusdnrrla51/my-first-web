@@ -263,21 +263,32 @@
     // ========================================================
     function DiaryWritePage({onSave, onCancel, editData}) {
       const {user} = useAuth();
-      const [title, setTitle] = useState(editData?.title||"");
-      const [content, setContent] = useState(editData?.content||"");
-      const [selEmotions, setSelEmotions] = useState(editData?.emotions||[]);
-      const [selActivities, setSelActivities] = useState(editData?.activities||[]);
-      const [places, setPlaces] = useState(editData?.places||[]);
-      const [people, setPeople] = useState(editData?.people||[]);
-      const [purchases, setPurchases] = useState(editData?.purchases||[]);
+      const DRAFT_KEY = `gyeol_draft_${today()}`;
+      const _draft = (() => { try { const s = localStorage.getItem(DRAFT_KEY); return s ? JSON.parse(s) : null; } catch(e) { return null; } })();
+      const _init = _draft || editData;
+      const [title, setTitle] = useState(_init?.title||"");
+      const [content, setContent] = useState(_init?.content||"");
+      const [selEmotions, setSelEmotions] = useState(_init?.emotions||[]);
+      const [selActivities, setSelActivities] = useState(_init?.activities||[]);
+      const [places, setPlaces] = useState(_init?.places||[]);
+      const [people, setPeople] = useState(_init?.people||[]);
+      const [purchases, setPurchases] = useState(_init?.purchases||[]);
       const [tab, setTab] = useState("emotion");
       const [saving, setSaving] = useState(false);
       const [openEmoGroup, setOpenEmoGroup] = useState(null);
       const [photoFile, setPhotoFile] = useState(null);
-      const [photoPreview, setPhotoPreview] = useState(editData?.photo_url||null);
+      const [photoPreview, setPhotoPreview] = useState(_init?.photo_url||null);
       const [newPlace, setNewPlace] = useState("");
       const [newPerson, setNewPerson] = useState("");
       const [newPurchase, setNewPurchase] = useState("");
+
+      // 자동 임시 저장 — 변경될 때마다 localStorage에 백업
+      useEffect(() => {
+        const hasAny = title || content || selEmotions.length > 0 || selActivities.length > 0 || places.length > 0 || people.length > 0 || purchases.length > 0;
+        if (hasAny) {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, content, emotions: selEmotions, activities: selActivities, places, people, purchases, photo_url: photoPreview }));
+        }
+      }, [title, content, selEmotions, selActivities, places, people, purchases, photoPreview]);
 
       const toggleEmo = k => {
         const ex = selEmotions.find(e=>e.key===k);
@@ -326,6 +337,7 @@
           } catch(e) { console.error("사진 업로드 실패:", e); }
         }
         await onSave({ title, content, emotions:selEmotions, activities:selActivities, places, people, purchases, photo_url: photo_url || null, date:today() });
+        localStorage.removeItem(DRAFT_KEY);
         setSaving(false);
       };
 
@@ -892,7 +904,10 @@ ${chatHistory}
       const {user} = useAuth();
       const [diaries, setDiaries] = useState([]);
       const [dbLoading, setDbLoading] = useState(true);
-      const [mainTab, setMainTab] = useState("diary");
+      const [mainTab, setMainTab] = useState(() => {
+        const hash = window.location.hash.slice(1);
+        return ["diary","community","stats","mypage"].includes(hash) ? hash : "diary";
+      });
       const [selected, setSelected] = useState(null);
       const [writing, setWriting] = useState(false);
       const [showAI, setShowAI] = useState(false);
@@ -921,6 +936,17 @@ ${chatHistory}
         return () => el.removeEventListener("scroll", onScroll);
       }, [mainTab]);
 
+      // URL 해시 기반 탭 라우팅 (새로고침 시 현재 탭 유지)
+      useEffect(() => { window.location.hash = mainTab; }, [mainTab]);
+      useEffect(() => {
+        const onHashChange = () => {
+          const hash = window.location.hash.slice(1);
+          if (["diary","community","stats","mypage"].includes(hash)) setMainTab(hash);
+        };
+        window.addEventListener("hashchange", onHashChange);
+        return () => window.removeEventListener("hashchange", onHashChange);
+      }, []);
+
       // AI 분석 결과 저장 후 로컬 state 업데이트 (재로드 없이)
       const handleAnalysisSaved = useCallback((diaryId, text) => {
         setDiaries(prev => prev.map(d => d.id === diaryId ? { ...d, ai_analysis: text } : d));
@@ -937,6 +963,7 @@ ${chatHistory}
       useEffect(() => { if (user) loadDiaries(); }, [user]);
 
       const todayWritten = diaries.some(d=>d.date===today());
+      const hasDraft = (() => { try { return !!localStorage.getItem(`gyeol_draft_${today()}`); } catch(e) { return false; } })();
       const streak = (() => {
         let s=0; const d=new Date(); const start=todayWritten?0:1;
         for(let i=start;i<365;i++){const ds=new Date(d); ds.setDate(ds.getDate()-i); const key=ds.toISOString().slice(0,10); if(diaries.some(x=>x.date===key)) s++; else break;}
@@ -1017,9 +1044,15 @@ ${chatHistory}
                 {dbLoading ? (<div style={{textAlign:"center", padding:40, color:T.textSub}}><div style={{fontSize:14}}>일기를 불러오는 중...</div></div>) : (<>
                   <WeeklyAISummary diaries={diaries}/>
                   {streak>0 && (<div style={{background:T.gradient, borderRadius:14, padding:"14px 18px", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"space-between", color:"#fff"}}><div><div style={{fontSize:14, fontWeight:700}}>🔥 {streak}일째 나를 들여다보는 중</div><div style={{fontSize:11, opacity:0.85, marginTop:1}}>매일 쌓이는 기록이 결을 만들어요</div></div><div style={{fontSize:28, fontWeight:800}}>{streak}</div></div>)}
-                  <button ref={recordBtnRef} onClick={()=>{if(todayWritten) setShowEditConfirm(true); else setWriting(true);}}
-                    style={{width:"100%", padding:16, borderRadius:14, border:"none", background:todayWritten?T.border:T.gradient, color:todayWritten?T.textSub:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:16, minHeight:52, boxShadow:todayWritten?"none":`0 4px 16px ${T.accent}44`, display:"flex", alignItems:"center", justifyContent:"center", gap:6}}>
-                    <span style={{fontSize:18}}>✏️</span>{todayWritten?"오늘 일기 수정하기":"오늘 하루 기록하기"}
+                  {hasDraft && (
+                    <div onClick={()=>setWriting(true)} style={{background:`linear-gradient(135deg, ${T.card}, ${T.accentBg})`, borderRadius:14, padding:"16px 18px", marginBottom:10, border:`1.5px dashed ${T.accent}`, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", boxShadow:T.shadow, animation:"fadeIn 0.3s ease"}}>
+                      <div><div style={{fontSize:14, fontWeight:700, color:T.accent, marginBottom:3}}>📝 작성중인 일기가 있어요</div><div style={{fontSize:12, color:T.textSub}}>탭하여 이어서 작성하기</div></div>
+                      <div style={{fontSize:12, fontWeight:600, color:"#fff", padding:"6px 14px", background:T.accent, borderRadius:10}}>이어쓰기</div>
+                    </div>
+                  )}
+                  <button ref={recordBtnRef} onClick={()=>{if(!hasDraft&&todayWritten) setShowEditConfirm(true); else setWriting(true);}}
+                    style={{width:"100%", padding:16, borderRadius:14, border:"none", background:(hasDraft||!todayWritten)?T.gradient:T.border, color:(hasDraft||!todayWritten)?"#fff":T.textSub, fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:16, minHeight:52, boxShadow:(hasDraft||!todayWritten)?`0 4px 16px ${T.accent}44`:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6}}>
+                    <span style={{fontSize:18}}>✏️</span>{hasDraft?"작성중인 일기 이어쓰기":todayWritten?"오늘 일기 수정하기":"오늘 하루 기록하기"}
                   </button>
                   <div style={{display:"flex", flexDirection:"column", gap:10}}>
                     {filtered.length===0 && (<div style={{textAlign:"center", padding:40, color:T.textSub}}><div style={{fontSize:40, marginBottom:10}}>{searchQuery?"🔍":"✏️"}</div><div style={{fontSize:14, lineHeight:1.7}}>{searchQuery?`"${searchQuery}" 검색 결과가 없어요.`:"아직 기록이 없어요.\n오늘의 하루를 솔직하게 적어보세요."}</div></div>)}
@@ -1111,9 +1144,9 @@ ${chatHistory}
 
           {/* 플로팅 기록 버튼 */}
           {showFloatingBtn && mainTab==="diary" && (
-            <button onClick={()=>{if(todayWritten) setShowEditConfirm(true); else setWriting(true);}}
-              style={{position:"fixed", top:`calc(env(safe-area-inset-top,0px) + 60px)`, left:"50%", transform:"translateX(-50%)", padding:"12px 28px", borderRadius:30, border:"none", background:todayWritten?"rgba(232,223,208,0.95)":T.accent, color:todayWritten?T.textSub:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", zIndex:90, boxShadow:"0 4px 20px rgba(0,0,0,0.15)", display:"flex", alignItems:"center", gap:6, animation:"slideUp 0.25s ease", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)"}}>
-              <span style={{fontSize:16}}>✏️</span>{todayWritten?"오늘 일기 수정하기":"오늘 하루 기록하기"}
+            <button onClick={()=>{if(!hasDraft&&todayWritten) setShowEditConfirm(true); else setWriting(true);}}
+              style={{position:"fixed", top:`calc(env(safe-area-inset-top,0px) + 60px)`, left:"50%", transform:"translateX(-50%)", padding:"12px 28px", borderRadius:30, border:"none", background:(hasDraft||!todayWritten)?T.accent:"rgba(232,223,208,0.95)", color:(hasDraft||!todayWritten)?"#fff":T.textSub, fontSize:14, fontWeight:700, cursor:"pointer", zIndex:90, boxShadow:"0 4px 20px rgba(0,0,0,0.15)", display:"flex", alignItems:"center", gap:6, animation:"slideUp 0.25s ease", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)"}}>
+              <span style={{fontSize:16}}>✏️</span>{hasDraft?"작성중인 일기 이어쓰기":todayWritten?"오늘 일기 수정하기":"오늘 하루 기록하기"}
             </button>
           )}
 
