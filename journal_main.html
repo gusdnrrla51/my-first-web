@@ -1186,8 +1186,28 @@ ${diaryCtx}`;
       }
     }
 
+    // MBTI → 기질 그룹 매핑
+    const TEMPERAMENT_MAP = {
+      INTJ:"NT", INTP:"NT", ENTJ:"NT", ENTP:"NT",
+      INFJ:"NF", INFP:"NF", ENFJ:"NF", ENFP:"NF",
+      ISTJ:"SJ", ISFJ:"SJ", ESTJ:"SJ", ESFJ:"SJ",
+      ISTP:"SP", ISFP:"SP", ESTP:"SP", ESFP:"SP",
+    };
+    const MBTI_DESCRIPTIONS = {
+      INTJ:"전략가", INTP:"논리술사", ENTJ:"통솔자", ENTP:"변론가",
+      INFJ:"옹호자", INFP:"중재자", ENFJ:"선도자", ENFP:"활동가",
+      ISTJ:"현실주의자", ISTP:"장인", ESTJ:"경영자", ESTP:"사업가",
+      ISFJ:"수호자", ISFP:"모험가", ESFJ:"집정관", ESFP:"연예인",
+    };
+    const TEMPERAMENT_INFO = {
+      NT: { label:"분석가형", emoji:"🧠", color:"#9B59B6", types:["INTJ","INTP","ENTJ","ENTP"], desc:"이성적이고 전략적인 사고를 즐기는 사람들" },
+      NF: { label:"외교관형", emoji:"💚", color:"#2ECC71", types:["INFJ","INFP","ENFJ","ENFP"], desc:"따뜻하고 이상적인 세계를 꿈꾸는 사람들" },
+      SJ: { label:"관리자형", emoji:"🛡️", color:"#3498DB", types:["ISTJ","ISFJ","ESTJ","ESFJ"], desc:"안정적이고 책임감 있게 세상을 지키는 사람들" },
+      SP: { label:"탐험가형", emoji:"🌈", color:"#E67E22", types:["ISTP","ISFP","ESTP","ESFP"], desc:"자유롭고 순간을 즐기며 탐험하는 사람들" },
+    };
+
     // ========================================================
-    // 🔗 CommunityTab — MBTI 기반 연대 채팅방
+    // 🔗 CommunityTab — 기질 그룹방 중심 연대
     // ========================================================
     function CommunityTab({ diaries }) {
       const { user } = useAuth();
@@ -1199,6 +1219,8 @@ ${diaryCtx}`;
       const [myRooms, setMyRooms] = useState([]);
       const [memberCounts, setMemberCounts] = useState({});
 
+      const myTemperament = mbti ? TEMPERAMENT_MAP[mbti] : null;
+
       // 프로필 로드
       useEffect(() => {
         if (!user) return;
@@ -1207,13 +1229,13 @@ ${diaryCtx}`;
           const { data } = await sb.from('user_profiles').select('mbti, mbti_updated_at').eq('user_id', user.id).single();
           if (data?.mbti) setMbti(data.mbti);
           // 내가 참여한 방 로드
-          const { data: members } = await sb.from('mbti_chat_members').select('room_id, mbti_chat_rooms(mbti)').eq('user_id', user.id);
-          if (members) setMyRooms(members.map(m => ({ room_id: m.room_id, mbti: m.mbti_chat_rooms?.mbti })));
+          const { data: members } = await sb.from('mbti_chat_members').select('room_id, mbti_chat_rooms(mbti, room_type)').eq('user_id', user.id);
+          if (members) setMyRooms(members.map(m => ({ room_id: m.room_id, mbti: m.mbti_chat_rooms?.mbti, room_type: m.mbti_chat_rooms?.room_type })));
           setLoadingProfile(false);
         })();
       }, [user]);
 
-      // MBTI별 멤버 수 로드
+      // 방별 멤버 수 로드
       useEffect(() => {
         (async () => {
           const { data: rooms } = await sb.from('mbti_chat_rooms').select('id, mbti');
@@ -1227,31 +1249,56 @@ ${diaryCtx}`;
         })();
       }, [myRooms]);
 
+      // MBTI 분석 후 기질 그룹방에 자동 참여
+      const autoJoinGroupRoom = async (mbtiResult) => {
+        const temperament = TEMPERAMENT_MAP[mbtiResult];
+        if (!temperament) return;
+        const { data: room } = await sb.from('mbti_chat_rooms').select('id').eq('mbti', temperament).single();
+        if (!room) return;
+        const { data: existing } = await sb.from('mbti_chat_members').select('id').eq('room_id', room.id).eq('user_id', user.id).single();
+        if (!existing) {
+          await sb.from('mbti_chat_members').insert({ room_id: room.id, user_id: user.id });
+        }
+        setMyRooms(prev => {
+          if (prev.some(r => r.mbti === temperament)) return prev;
+          return [...prev, { room_id: room.id, mbti: temperament, room_type: 'group' }];
+        });
+      };
+
       const handleAnalyze = async () => {
         setAnalyzing(true);
         const result = await analyzeMBTI(diaries, user.id, user.name);
         if (result) {
           setMbti(result.mbti);
           setConfidence(result.confidence);
+          await autoJoinGroupRoom(result.mbti);
         } else {
           alert("MBTI 분석에 실패했어요. 일기가 있는지 확인해주세요.");
         }
         setAnalyzing(false);
       };
 
-      const handleJoinRoom = async (mbtiType) => {
-        const { data: room } = await sb.from('mbti_chat_rooms').select('id').eq('mbti', mbtiType).single();
+      // 기존 MBTI가 있는데 그룹방에 아직 안 들어간 경우 자동 참여
+      useEffect(() => {
+        if (!mbti || loadingProfile) return;
+        const temperament = TEMPERAMENT_MAP[mbti];
+        if (!temperament) return;
+        if (myRooms.some(r => r.mbti === temperament)) return;
+        autoJoinGroupRoom(mbti);
+      }, [mbti, loadingProfile]);
+
+      const handleJoinRoom = async (roomMbti) => {
+        const { data: room } = await sb.from('mbti_chat_rooms').select('id, room_type').eq('mbti', roomMbti).single();
         if (!room) return;
-        // 이미 참여중인지 확인
         const { data: existing } = await sb.from('mbti_chat_members').select('id').eq('room_id', room.id).eq('user_id', user.id).single();
         if (!existing) {
           await sb.from('mbti_chat_members').insert({ room_id: room.id, user_id: user.id });
         }
         setMyRooms(prev => {
-          if (prev.some(r => r.mbti === mbtiType)) return prev;
-          return [...prev, { room_id: room.id, mbti: mbtiType }];
+          if (prev.some(r => r.mbti === roomMbti)) return prev;
+          return [...prev, { room_id: room.id, mbti: roomMbti, room_type: room.room_type }];
         });
-        setCurrentRoom({ room_id: room.id, mbti: mbtiType });
+        setCurrentRoom({ room_id: room.id, mbti: roomMbti });
       };
 
       if (currentRoom) {
@@ -1270,12 +1317,10 @@ ${diaryCtx}`;
       // MBTI 분석 전 상태
       if (!mbti) {
         const diaryCount = diaries.length;
-
         return (
           <div style={{ padding: "30px 16px" }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 4 }}>연대</div>
             <div style={{ fontSize: 13, color: T.textSub, marginBottom: 20 }}>결이 맞는 사람들과 연결되세요</div>
-
             <div style={{ background: T.card, borderRadius: 16, padding: 24, boxShadow: T.shadow, textAlign: "center" }}>
               <div style={{ fontSize: 48, marginBottom: 16 }}>🧠</div>
               <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 8 }}>나의 MBTI를 알아보세요</div>
@@ -1294,19 +1339,10 @@ ${diaryCtx}`;
         );
       }
 
-      // MBTI 확인된 상태 — 방 목록
-      const MBTI_DESCRIPTIONS = {
-        INTJ: "전략가", INTP: "논리술사", ENTJ: "통솔자", ENTP: "변론가",
-        INFJ: "옹호자", INFP: "중재자", ENFJ: "선도자", ENFP: "활동가",
-        ISTJ: "현실주의자", ISTP: "장인", ESTJ: "경영자", ESTP: "사업가",
-        ISFJ: "수호자", ISFP: "모험가", ESFJ: "집정관", ESFP: "연예인",
-      };
-      const MBTI_GROUPS = [
-        { label: "분석가형", types: ["INTJ", "INTP", "ENTJ", "ENTP"], color: "#9B59B6" },
-        { label: "외교관형", types: ["INFJ", "INFP", "ENFJ", "ENFP"], color: "#2ECC71" },
-        { label: "관리자형", types: ["ISTJ", "ISTP", "ESTJ", "ESTP"], color: "#3498DB" },
-        { label: "탐험가형", types: ["ISFJ", "ISFP", "ESFJ", "ESFP"], color: "#E67E22" },
-      ];
+      // MBTI 확인 상태 — 그룹방 중심 UI
+      const myGroup = TEMPERAMENT_INFO[myTemperament];
+      const groupRooms = myRooms.filter(r => r.room_type === 'group');
+      const individualRooms = myRooms.filter(r => r.room_type === 'individual');
 
       return (
         <div style={{ padding: "20px 16px", paddingBottom: 20 }}>
@@ -1318,7 +1354,10 @@ ${diaryCtx}`;
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 4 }}>나의 결 유형</div>
-                <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 4 }}>{mbti}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                  <span style={{ fontSize: 28, fontWeight: 800, letterSpacing: 4 }}>{mbti}</span>
+                  {myGroup && <span style={{ fontSize: 14, opacity: 0.85, background: myGroup.color + "44", padding: "3px 10px", borderRadius: 8 }}>{myGroup.emoji} {myGroup.label}</span>}
+                </div>
                 <div style={{ fontSize: 14, opacity: 0.9, marginTop: 4 }}>{MBTI_DESCRIPTIONS[mbti] || ""}</div>
               </div>
               <button onClick={handleAnalyze} disabled={analyzing}
@@ -1335,67 +1374,84 @@ ${diaryCtx}`;
             )}
           </div>
 
-          {/* 내 MBTI 방 바로가기 */}
-          <div style={{ background: T.card, borderRadius: 16, padding: "16px 18px", marginBottom: 16, boxShadow: T.shadow, border: `2px solid ${T.accent}` }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>💬 {mbti} 방</div>
-                <div style={{ fontSize: 12, color: T.textSub, marginTop: 2 }}>나와 같은 결의 사람들 · {memberCounts[mbti] || 0}명</div>
-              </div>
-              <button onClick={() => handleJoinRoom(mbti)}
-                style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: T.gradient, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", minHeight: 42 }}>
-                입장하기
-              </button>
-            </div>
-          </div>
-
-          {/* 참여중인 방 */}
-          {myRooms.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 10 }}>참여 중인 방</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {myRooms.map(r => (
-                  <div key={r.room_id} onClick={() => setCurrentRoom(r)}
-                    style={{ background: T.card, borderRadius: 14, padding: "14px 18px", boxShadow: T.shadow, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 12, background: T.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: T.accent }}>{r.mbti}</div>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{r.mbti} · {MBTI_DESCRIPTIONS[r.mbti] || ""}</div>
-                        <div style={{ fontSize: 11, color: T.textSub }}>{memberCounts[r.mbti] || 0}명 참여 중</div>
-                      </div>
+          {/* 내 기질 그룹방 (메인) */}
+          {myGroup && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>🏠 나의 커뮤니티</div>
+              <div onClick={() => handleJoinRoom(myTemperament)}
+                style={{ background: T.card, borderRadius: 16, padding: "18px 20px", boxShadow: T.shadowHover, border: `2px solid ${myGroup.color}`, cursor: "pointer" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 14, background: myGroup.color + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>{myGroup.emoji}</div>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{myGroup.label} 방</div>
+                      <div style={{ fontSize: 12, color: T.textSub, marginTop: 1 }}>{memberCounts[myTemperament] || 0}명 참여 중</div>
                     </div>
-                    <span style={{ fontSize: 13, color: T.textSub }}>→</span>
                   </div>
-                ))}
+                  <div style={{ padding: "8px 16px", borderRadius: 10, background: myGroup.color, color: "#fff", fontSize: 13, fontWeight: 700 }}>입장</div>
+                </div>
+                <div style={{ fontSize: 13, color: T.textSub, lineHeight: 1.7 }}>{myGroup.desc}</div>
+                <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                  {myGroup.types.map(t => (
+                    <span key={t} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 10, background: t === mbti ? myGroup.color + "33" : T.bg, border: `1px solid ${t === mbti ? myGroup.color : T.border}`, color: t === mbti ? myGroup.color : T.textSub, fontWeight: t === mbti ? 700 : 400 }}>
+                      {t}{t === mbti ? " ← 나" : ""} {MBTI_DESCRIPTIONS[t]}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {/* 전체 MBTI 방 목록 */}
-          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 10 }}>전체 유형별 방</div>
-          {MBTI_GROUPS.map(group => (
-            <div key={group.label} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: group.color, marginBottom: 8, padding: "4px 0" }}>{group.label}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {group.types.map(type => {
-                  const isMine = type === mbti;
-                  const isJoined = myRooms.some(r => r.mbti === type);
-                  return (
-                    <div key={type} onClick={() => handleJoinRoom(type)}
-                      style={{ background: isMine ? T.accentBg : T.card, borderRadius: 12, padding: "12px 14px", boxShadow: T.shadow, cursor: "pointer", border: isMine ? `2px solid ${T.accent}` : `1px solid ${T.border}` }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: isMine ? T.accent : T.text }}>{type}</div>
-                        {isMine && <span style={{ fontSize: 10, background: T.accent, color: "#fff", padding: "2px 8px", borderRadius: 8, fontWeight: 700 }}>ME</span>}
-                        {isJoined && !isMine && <span style={{ fontSize: 10, background: T.success, color: "#fff", padding: "2px 8px", borderRadius: 8, fontWeight: 700 }}>참여중</span>}
+          {/* 다른 기질 그룹방 */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>🌏 다른 결의 사람들</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {Object.entries(TEMPERAMENT_INFO).filter(([k]) => k !== myTemperament).map(([key, info]) => {
+                const isJoined = myRooms.some(r => r.mbti === key);
+                return (
+                  <div key={key} onClick={() => handleJoinRoom(key)}
+                    style={{ background: T.card, borderRadius: 14, padding: "14px 18px", boxShadow: T.shadow, cursor: "pointer", border: isJoined ? `1.5px solid ${info.color}` : `1px solid ${T.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 38, height: 38, borderRadius: 12, background: info.color + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{info.emoji}</div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{info.label} 방</div>
+                          <div style={{ fontSize: 11, color: T.textSub }}>{info.desc}</div>
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11, color: T.textSub, marginTop: 2 }}>{MBTI_DESCRIPTIONS[type]}</div>
-                      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{memberCounts[type] || 0}명</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: T.textMuted }}>{memberCounts[key] || 0}명</span>
+                        {isJoined && <span style={{ fontSize: 10, background: T.success, color: "#fff", padding: "2px 8px", borderRadius: 8, fontWeight: 700 }}>참여중</span>}
+                        <span style={{ fontSize: 13, color: T.textSub }}>→</span>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          </div>
+
+          {/* 개별 MBTI 방 (보조) */}
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 4 }}>🔍 개별 유형 방</div>
+            <div style={{ fontSize: 12, color: T.textSub, marginBottom: 10 }}>정확히 같은 MBTI끼리 더 깊게 소통하고 싶다면</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+              {Object.keys(MBTI_DESCRIPTIONS).map(type => {
+                const isMine = type === mbti;
+                const isJoined = myRooms.some(r => r.mbti === type);
+                const tempInfo = TEMPERAMENT_INFO[TEMPERAMENT_MAP[type]];
+                return (
+                  <div key={type} onClick={() => handleJoinRoom(type)}
+                    style={{ background: isMine ? tempInfo.color + "18" : T.card, borderRadius: 10, padding: "10px 6px", textAlign: "center", cursor: "pointer", border: isMine ? `2px solid ${tempInfo.color}` : `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: isMine ? tempInfo.color : T.text }}>{type}</div>
+                    <div style={{ fontSize: 9, color: T.textSub, marginTop: 2 }}>{MBTI_DESCRIPTIONS[type]}</div>
+                    <div style={{ fontSize: 9, color: T.textMuted, marginTop: 2 }}>{memberCounts[type] || 0}명</div>
+                    {isMine && <div style={{ width: 6, height: 6, borderRadius: "50%", background: tempInfo.color, margin: "4px auto 0" }} />}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       );
     }
@@ -1414,7 +1470,11 @@ ${diaryCtx}`;
       const messagesEndRef = useRef(null);
       const scrollContainerRef = useRef(null);
 
-      const ROOM_DESC = "이 방은 가장 당신과 잘 어울리는 결이 맞는 사람들이 연결된 방입니다. 편하게 소통하세요";
+      const isGroupRoom = TEMPERAMENT_INFO[mbti];
+      const roomLabel = isGroupRoom ? `${isGroupRoom.emoji} ${isGroupRoom.label} 방` : `${mbti} 방`;
+      const ROOM_DESC = isGroupRoom
+        ? isGroupRoom.desc + "\n이 방은 가장 당신과 잘 어울리는 결이 맞는 사람들이 연결된 방입니다. 편하게 소통하세요"
+        : "이 방은 가장 당신과 잘 어울리는 결이 맞는 사람들이 연결된 방입니다. 편하게 소통하세요";
 
       // 메시지 로드
       const loadMessages = useCallback(async () => {
@@ -1507,7 +1567,7 @@ ${diaryCtx}`;
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: T.textSub, minWidth: 40, minHeight: 40, display: "flex", alignItems: "center" }}>←</button>
               <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{mbti} 방</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{roomLabel}</div>
                 <div style={{ fontSize: 11, color: T.textSub }}>{members.length}명 참여 중</div>
               </div>
             </div>
