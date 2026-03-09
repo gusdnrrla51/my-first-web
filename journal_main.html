@@ -1109,6 +1109,508 @@ ${chatHistory}
       );
     }
 
+    // ========================================================
+    // 🧠 MBTI 분석 — 최근 7일 일기 기반
+    // ========================================================
+    async function analyzeMBTI(diaries, userId, displayName) {
+      // 최근 7일 일기 필터
+      const now = new Date();
+      const last7 = diaries.filter(d => {
+        const days = Math.floor((now - new Date(d.date + "T00:00:00")) / 86400000);
+        return days < 7;
+      });
+      if (last7.length === 0) return null;
+
+      const diaryCtx = last7.map(d => {
+        const emos = (d.emotions||[]).map(e => `${EMOTIONS[e.key]?.label||e.key}(강도${e.intensity})`).join(", ") || "없음";
+        const acts = (d.activities||[]).join(", ") || "없음";
+        const ppl = (d.people||[]).join(", ") || "없음";
+        const places = (d.places||[]).map(p=>p.name).join(", ") || "없음";
+        return `[${d.date}]\n제목: ${d.title}\n내용: ${(d.content||"").slice(0,300)}\n감정: ${emos}\n활동: ${acts}\n만난 사람: ${ppl}\n장소: ${places}`;
+      }).join("\n\n---\n\n");
+
+      const prompt = `당신은 MBTI 성격유형 분석 전문가입니다. 아래 사용자의 최근 7일간 일기를 분석하여 MBTI를 추측해주세요.
+
+## 분석 기준:
+
+### E(외향) vs I(내향):
+- 사람 언급 빈도 (많으면 E, 적으면 I)
+- 사회적 활동 vs 혼자만의 활동
+- "우리", "같이" vs "나", "혼자" 표현
+- 에너지원: 사람과 만남=E, 혼자 시간=I
+
+### S(감각) vs N(직관):
+- 구체적 사실/수치/시간 기술=S vs 추상적/비유적 표현=N
+- 순차적 일과 기록=S vs 의미 해석/패턴 발견=N
+- 현실적 실용적 주제=S vs 미래/가능성/아이디어=N
+
+### T(사고) vs F(감정):
+- 원인-결과 분석적 서술=T vs 감정 중심 서술=F
+- 문제 해결 초점=T vs 관계/공감 초점=F
+- 감정 표현이 분석적=T vs 풍부하고 상세=F
+
+### J(판단) vs P(인식):
+- 계획/목표/일정 언급=J vs 즉흥/탐험/유연성=P
+- "해야 한다", "완료했다"=J vs "해볼까", "갑자기"=P
+- 체계적 구조=J vs 자유로운 흐름=P
+
+## 중요:
+- 일기 작성 자체가 내향적 행동이므로 E 신호가 있으면 가중치를 둘 것
+- 한국어 문화적 맥락 고려
+- 반드시 아래 JSON 형식으로만 응답:
+{"mbti":"XXXX","confidence":{"E_I":"E 또는 I 선택 이유","S_N":"S 또는 N 선택 이유","T_F":"T 또는 F 선택 이유","J_P":"J 또는 P 선택 이유"}}
+
+## 분석할 일기 (최근 7일):
+
+${diaryCtx}`;
+
+      try {
+        const result = await callGemini(prompt);
+        // JSON 파싱 시도
+        const jsonMatch = result.match(/\{[\s\S]*"mbti"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          const mbti = parsed.mbti?.toUpperCase();
+          if (mbti && /^[EI][SN][TF][JP]$/.test(mbti)) {
+            // DB에 저장
+            const { data: existing } = await sb.from('user_profiles').select('id').eq('user_id', userId).single();
+            if (existing) {
+              await sb.from('user_profiles').update({ mbti, mbti_updated_at: new Date().toISOString(), display_name: displayName }).eq('user_id', userId);
+            } else {
+              await sb.from('user_profiles').insert({ user_id: userId, mbti, mbti_updated_at: new Date().toISOString(), display_name: displayName });
+            }
+            return { mbti, confidence: parsed.confidence };
+          }
+        }
+        return null;
+      } catch (e) {
+        console.error("MBTI 분석 오류:", e);
+        return null;
+      }
+    }
+
+    // ========================================================
+    // 🔗 CommunityTab — MBTI 기반 연대 채팅방
+    // ========================================================
+    function CommunityTab({ diaries }) {
+      const { user } = useAuth();
+      const [mbti, setMbti] = useState(null);
+      const [analyzing, setAnalyzing] = useState(false);
+      const [loadingProfile, setLoadingProfile] = useState(true);
+      const [confidence, setConfidence] = useState(null);
+      const [currentRoom, setCurrentRoom] = useState(null);
+      const [myRooms, setMyRooms] = useState([]);
+      const [memberCounts, setMemberCounts] = useState({});
+
+      // 프로필 로드
+      useEffect(() => {
+        if (!user) return;
+        (async () => {
+          setLoadingProfile(true);
+          const { data } = await sb.from('user_profiles').select('mbti, mbti_updated_at').eq('user_id', user.id).single();
+          if (data?.mbti) setMbti(data.mbti);
+          // 내가 참여한 방 로드
+          const { data: members } = await sb.from('mbti_chat_members').select('room_id, mbti_chat_rooms(mbti)').eq('user_id', user.id);
+          if (members) setMyRooms(members.map(m => ({ room_id: m.room_id, mbti: m.mbti_chat_rooms?.mbti })));
+          setLoadingProfile(false);
+        })();
+      }, [user]);
+
+      // MBTI별 멤버 수 로드
+      useEffect(() => {
+        (async () => {
+          const { data: rooms } = await sb.from('mbti_chat_rooms').select('id, mbti');
+          if (!rooms) return;
+          const counts = {};
+          for (const room of rooms) {
+            const { count } = await sb.from('mbti_chat_members').select('*', { count: 'exact', head: true }).eq('room_id', room.id);
+            counts[room.mbti] = count || 0;
+          }
+          setMemberCounts(counts);
+        })();
+      }, [myRooms]);
+
+      const handleAnalyze = async () => {
+        setAnalyzing(true);
+        const result = await analyzeMBTI(diaries, user.id, user.name);
+        if (result) {
+          setMbti(result.mbti);
+          setConfidence(result.confidence);
+        } else {
+          alert("MBTI 분석에 실패했어요. 최근 7일간 일기가 있는지 확인해주세요.");
+        }
+        setAnalyzing(false);
+      };
+
+      const handleJoinRoom = async (mbtiType) => {
+        const { data: room } = await sb.from('mbti_chat_rooms').select('id').eq('mbti', mbtiType).single();
+        if (!room) return;
+        // 이미 참여중인지 확인
+        const { data: existing } = await sb.from('mbti_chat_members').select('id').eq('room_id', room.id).eq('user_id', user.id).single();
+        if (!existing) {
+          await sb.from('mbti_chat_members').insert({ room_id: room.id, user_id: user.id });
+        }
+        setMyRooms(prev => {
+          if (prev.some(r => r.mbti === mbtiType)) return prev;
+          return [...prev, { room_id: room.id, mbti: mbtiType }];
+        });
+        setCurrentRoom({ room_id: room.id, mbti: mbtiType });
+      };
+
+      if (currentRoom) {
+        return <ChatRoom roomId={currentRoom.room_id} mbti={currentRoom.mbti} onBack={() => setCurrentRoom(null)} />;
+      }
+
+      if (loadingProfile) {
+        return (
+          <div style={{ textAlign: "center", padding: "80px 20px" }}>
+            <div style={{ fontSize: 32, marginBottom: 16, animation: "pulse 1.5s infinite" }}>🔗</div>
+            <div style={{ fontSize: 14, color: T.textSub }}>연대 정보를 불러오는 중...</div>
+          </div>
+        );
+      }
+
+      // MBTI 분석 전 상태
+      if (!mbti) {
+        const last7count = diaries.filter(d => {
+          const days = Math.floor((new Date() - new Date(d.date + "T00:00:00")) / 86400000);
+          return days < 7;
+        }).length;
+
+        return (
+          <div style={{ padding: "30px 16px" }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 4 }}>연대</div>
+            <div style={{ fontSize: 13, color: T.textSub, marginBottom: 20 }}>결이 맞는 사람들과 연결되세요</div>
+
+            <div style={{ background: T.card, borderRadius: 16, padding: 24, boxShadow: T.shadow, textAlign: "center" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🧠</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: T.text, marginBottom: 8 }}>나의 MBTI를 알아보세요</div>
+              <div style={{ fontSize: 14, color: T.textSub, lineHeight: 1.8, marginBottom: 20 }}>
+                최근 7일간의 일기를 AI가 분석하여<br />당신의 MBTI 성격유형을 추측합니다.
+              </div>
+              <div style={{ fontSize: 13, color: T.accent, fontWeight: 600, marginBottom: 20, padding: "10px 16px", background: T.accentBg, borderRadius: 12 }}>
+                최근 7일 일기: {last7count}개 {last7count === 0 && "— 일기를 먼저 작성해주세요"}
+              </div>
+              <button onClick={handleAnalyze} disabled={analyzing || last7count === 0}
+                style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: last7count > 0 ? T.gradient : T.border, color: last7count > 0 ? "#fff" : T.textSub, fontSize: 16, fontWeight: 700, cursor: last7count > 0 ? "pointer" : "default", opacity: analyzing ? 0.7 : 1, minHeight: 52 }}>
+                {analyzing ? "🤖 AI가 분석 중..." : "나의 결 유형 분석하기"}
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // MBTI 확인된 상태 — 방 목록
+      const MBTI_DESCRIPTIONS = {
+        INTJ: "전략가", INTP: "논리술사", ENTJ: "통솔자", ENTP: "변론가",
+        INFJ: "옹호자", INFP: "중재자", ENFJ: "선도자", ENFP: "활동가",
+        ISTJ: "현실주의자", ISTP: "장인", ESTJ: "경영자", ESTP: "사업가",
+        ISFJ: "수호자", ISFP: "모험가", ESFJ: "집정관", ESFP: "연예인",
+      };
+      const MBTI_GROUPS = [
+        { label: "분석가형", types: ["INTJ", "INTP", "ENTJ", "ENTP"], color: "#9B59B6" },
+        { label: "외교관형", types: ["INFJ", "INFP", "ENFJ", "ENFP"], color: "#2ECC71" },
+        { label: "관리자형", types: ["ISTJ", "ISTP", "ESTJ", "ESTP"], color: "#3498DB" },
+        { label: "탐험가형", types: ["ISFJ", "ISFP", "ESFJ", "ESFP"], color: "#E67E22" },
+      ];
+
+      return (
+        <div style={{ padding: "20px 16px", paddingBottom: 20 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 4 }}>연대</div>
+          <div style={{ fontSize: 13, color: T.textSub, marginBottom: 16 }}>결이 맞는 사람들과 연결되세요</div>
+
+          {/* 내 MBTI 카드 */}
+          <div style={{ background: "linear-gradient(135deg,#4A3728,#7A5C44)", borderRadius: 16, padding: "20px", marginBottom: 16, color: "#fff", boxShadow: "0 4px 20px rgba(74,55,40,0.3)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 4 }}>나의 결 유형</div>
+                <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 4 }}>{mbti}</div>
+                <div style={{ fontSize: 14, opacity: 0.9, marginTop: 4 }}>{MBTI_DESCRIPTIONS[mbti] || ""}</div>
+              </div>
+              <button onClick={handleAnalyze} disabled={analyzing}
+                style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", minHeight: 36 }}>
+                {analyzing ? "분석 중..." : "재분석"}
+              </button>
+            </div>
+            {confidence && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.2)", fontSize: 12, lineHeight: 1.8, opacity: 0.85 }}>
+                {Object.entries(confidence).map(([k, v]) => (
+                  <div key={k}><span style={{ fontWeight: 700 }}>{k}:</span> {v}</div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 내 MBTI 방 바로가기 */}
+          <div style={{ background: T.card, borderRadius: 16, padding: "16px 18px", marginBottom: 16, boxShadow: T.shadow, border: `2px solid ${T.accent}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>💬 {mbti} 방</div>
+                <div style={{ fontSize: 12, color: T.textSub, marginTop: 2 }}>나와 같은 결의 사람들 · {memberCounts[mbti] || 0}명</div>
+              </div>
+              <button onClick={() => handleJoinRoom(mbti)}
+                style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: T.gradient, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", minHeight: 42 }}>
+                입장하기
+              </button>
+            </div>
+          </div>
+
+          {/* 참여중인 방 */}
+          {myRooms.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 10 }}>참여 중인 방</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {myRooms.map(r => (
+                  <div key={r.room_id} onClick={() => setCurrentRoom(r)}
+                    style={{ background: T.card, borderRadius: 14, padding: "14px 18px", boxShadow: T.shadow, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: T.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: T.accent }}>{r.mbti}</div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{r.mbti} · {MBTI_DESCRIPTIONS[r.mbti] || ""}</div>
+                        <div style={{ fontSize: 11, color: T.textSub }}>{memberCounts[r.mbti] || 0}명 참여 중</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 13, color: T.textSub }}>→</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 전체 MBTI 방 목록 */}
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 10 }}>전체 유형별 방</div>
+          {MBTI_GROUPS.map(group => (
+            <div key={group.label} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: group.color, marginBottom: 8, padding: "4px 0" }}>{group.label}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {group.types.map(type => {
+                  const isMine = type === mbti;
+                  const isJoined = myRooms.some(r => r.mbti === type);
+                  return (
+                    <div key={type} onClick={() => handleJoinRoom(type)}
+                      style={{ background: isMine ? T.accentBg : T.card, borderRadius: 12, padding: "12px 14px", boxShadow: T.shadow, cursor: "pointer", border: isMine ? `2px solid ${T.accent}` : `1px solid ${T.border}` }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: isMine ? T.accent : T.text }}>{type}</div>
+                        {isMine && <span style={{ fontSize: 10, background: T.accent, color: "#fff", padding: "2px 8px", borderRadius: 8, fontWeight: 700 }}>ME</span>}
+                        {isJoined && !isMine && <span style={{ fontSize: 10, background: T.success, color: "#fff", padding: "2px 8px", borderRadius: 8, fontWeight: 700 }}>참여중</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: T.textSub, marginTop: 2 }}>{MBTI_DESCRIPTIONS[type]}</div>
+                      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{memberCounts[type] || 0}명</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================================
+    // 💬 ChatRoom — MBTI 채팅방
+    // ========================================================
+    function ChatRoom({ roomId, mbti, onBack }) {
+      const { user } = useAuth();
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState("");
+      const [loading, setLoading] = useState(true);
+      const [sending, setSending] = useState(false);
+      const [members, setMembers] = useState([]);
+      const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+      const messagesEndRef = useRef(null);
+      const scrollContainerRef = useRef(null);
+
+      const ROOM_DESC = "이 방은 가장 당신과 잘 어울리는 결이 맞는 사람들이 연결된 방입니다. 편하게 소통하세요";
+
+      // 메시지 로드
+      const loadMessages = useCallback(async () => {
+        const { data } = await sb.from('mbti_chat_messages')
+          .select('*')
+          .eq('room_id', roomId)
+          .order('created_at', { ascending: true })
+          .limit(200);
+        if (data) setMessages(data);
+        setLoading(false);
+      }, [roomId]);
+
+      // 멤버 로드
+      const loadMembers = useCallback(async () => {
+        const { data } = await sb.from('mbti_chat_members')
+          .select('user_id, joined_at')
+          .eq('room_id', roomId);
+        if (data) setMembers(data);
+      }, [roomId]);
+
+      useEffect(() => {
+        loadMessages();
+        loadMembers();
+        // 30초마다 새 메시지 폴링 (실시간 불필요)
+        const interval = setInterval(() => {
+          loadMessages();
+        }, 30000);
+        return () => clearInterval(interval);
+      }, [loadMessages, loadMembers]);
+
+      // 스크롤 하단으로
+      useEffect(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+      }, [messages]);
+
+      const handleSend = async () => {
+        const text = input.trim();
+        if (!text || sending) return;
+        setSending(true);
+        setInput("");
+        const newMsg = {
+          room_id: roomId,
+          user_id: user.id,
+          content: text,
+          display_name: user.name,
+        };
+        // 즉시 로컬에 추가 (낙관적 업데이트)
+        const tempMsg = { ...newMsg, id: 'temp-' + Date.now(), created_at: new Date().toISOString() };
+        setMessages(prev => [...prev, tempMsg]);
+
+        const { error } = await sb.from('mbti_chat_messages').insert(newMsg);
+        if (error) {
+          console.error("메시지 전송 오류:", error);
+          setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+          setInput(text);
+        } else {
+          // 서버에서 다시 로드하여 정확한 데이터 반영
+          await loadMessages();
+        }
+        setSending(false);
+      };
+
+      const handleLeave = async () => {
+        await sb.from('mbti_chat_members').delete().eq('room_id', roomId).eq('user_id', user.id);
+        onBack();
+      };
+
+      const fmtTime = (iso) => {
+        const d = new Date(iso);
+        const h = d.getHours();
+        const m = String(d.getMinutes()).padStart(2, "0");
+        const ampm = h >= 12 ? "오후" : "오전";
+        const h12 = h % 12 || 12;
+        return `${ampm} ${h12}:${m}`;
+      };
+      const fmtDate = (iso) => {
+        const d = new Date(iso);
+        return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+      };
+
+      // 날짜 구분선을 위한 그룹핑
+      let lastDate = "";
+
+      return (
+        <div style={{ position: "fixed", inset: 0, background: T.bg, zIndex: 10, display: "flex", flexDirection: "column" }}>
+          {/* 헤더 */}
+          <div style={{ background: T.card, borderBottom: `1px solid ${T.border}`, padding: "0 16px", paddingTop: `calc(env(safe-area-inset-top,0px) + 10px)`, paddingBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: T.textSub, minWidth: 40, minHeight: 40, display: "flex", alignItems: "center" }}>←</button>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{mbti} 방</div>
+                <div style={{ fontSize: 11, color: T.textSub }}>{members.length}명 참여 중</div>
+              </div>
+            </div>
+            <button onClick={() => setShowLeaveConfirm(true)}
+              style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.danger, fontWeight: 600, cursor: "pointer", minHeight: 36 }}>
+              나가기
+            </button>
+          </div>
+
+          {/* 메시지 영역 */}
+          <div ref={scrollContainerRef} style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 14px" }}>
+            {/* 방 설명 */}
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ display: "inline-block", background: T.accentBg, borderRadius: 16, padding: "14px 20px", maxWidth: 300 }}>
+                <div style={{ fontSize: 13, color: T.text, lineHeight: 1.8, fontWeight: 500 }}>{ROOM_DESC}</div>
+              </div>
+            </div>
+
+            {loading ? (
+              <div style={{ textAlign: "center", padding: 40, color: T.textSub }}>
+                <div style={{ fontSize: 14 }}>메시지를 불러오는 중...</div>
+              </div>
+            ) : messages.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 40, color: T.textSub }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
+                <div style={{ fontSize: 14, lineHeight: 1.7 }}>아직 대화가 없어요.<br />첫 메시지를 보내보세요!</div>
+              </div>
+            ) : (
+              messages.map((msg, i) => {
+                const isMe = msg.user_id === user.id;
+                const msgDate = fmtDate(msg.created_at);
+                let showDateLine = false;
+                if (msgDate !== lastDate) {
+                  showDateLine = true;
+                  lastDate = msgDate;
+                }
+                return (
+                  <React.Fragment key={msg.id}>
+                    {showDateLine && (
+                      <div style={{ textAlign: "center", margin: "16px 0 12px" }}>
+                        <span style={{ background: T.border, padding: "4px 14px", borderRadius: 12, fontSize: 11, color: T.textSub, fontWeight: 500 }}>{msgDate}</span>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end", gap: 6, marginBottom: 10 }}>
+                      {!isMe && (
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: T.accent, flexShrink: 0 }}>
+                          {(msg.display_name || "?")[0]}
+                        </div>
+                      )}
+                      <div style={{ maxWidth: "70%" }}>
+                        {!isMe && <div style={{ fontSize: 11, color: T.textSub, marginBottom: 3, paddingLeft: 4 }}>{msg.display_name}</div>}
+                        <div style={{ background: isMe ? T.accent : T.card, color: isMe ? "#fff" : T.text, padding: "10px 14px", borderRadius: isMe ? "16px 16px 4px 16px" : "16px 16px 16px 4px", fontSize: 14, lineHeight: 1.7, boxShadow: isMe ? "none" : T.shadow, border: isMe ? "none" : `1px solid ${T.border}`, wordBreak: "break-word" }}>
+                          {msg.content}
+                        </div>
+                        <div style={{ fontSize: 10, color: T.textMuted, marginTop: 3, textAlign: isMe ? "right" : "left", paddingLeft: isMe ? 0 : 4, paddingRight: isMe ? 4 : 0 }}>
+                          {fmtTime(msg.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* 메시지 입력 */}
+          <div style={{ background: T.card, borderTop: `1px solid ${T.border}`, padding: "10px 14px", paddingBottom: `calc(env(safe-area-inset-bottom,0px) + 10px)`, display: "flex", gap: 8, flexShrink: 0 }}>
+            <input value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleSend()}
+              placeholder="메시지를 입력하세요..."
+              style={{ flex: 1, padding: "12px 16px", borderRadius: 22, border: `1px solid ${T.border}`, background: T.bg, fontSize: 15, outline: "none", color: T.text, fontFamily: "inherit" }} />
+            <button onClick={handleSend} disabled={!input.trim() || sending}
+              style={{ width: 44, height: 44, borderRadius: "50%", border: "none", background: input.trim() ? T.accent : T.border, color: "#fff", cursor: input.trim() ? "pointer" : "default", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              ↑
+            </button>
+          </div>
+
+          {/* 나가기 확인 */}
+          {showLeaveConfirm && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(74,55,40,0.5)", zIndex: 200, display: "flex", flexDirection: "column", justifyContent: "flex-end" }} onClick={() => setShowLeaveConfirm(false)}>
+              <div onClick={e => e.stopPropagation()} style={{ background: T.card, borderRadius: "20px 20px 0 0", padding: "24px 20px", paddingBottom: `calc(env(safe-area-inset-bottom,0px) + 24px)`, textAlign: "center" }}>
+                <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border, margin: "0 auto 20px" }} />
+                <div style={{ fontSize: 36, marginBottom: 10 }}>👋</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 6 }}>이 방을 나가시겠어요?</div>
+                <div style={{ fontSize: 14, color: T.textSub, marginBottom: 20, lineHeight: 1.6 }}>나가면 채팅 내역을 볼 수 없어요.<br />다시 입장하면 볼 수 있어요.</div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => setShowLeaveConfirm(false)} style={{ flex: 1, padding: 15, borderRadius: 12, border: `1px solid ${T.border}`, background: T.card, fontSize: 15, fontWeight: 600, color: T.textSub, cursor: "pointer", minHeight: 50 }}>취소</button>
+                  <button onClick={handleLeave} style={{ flex: 1, padding: 15, borderRadius: 12, border: "none", background: T.danger, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", minHeight: 50 }}>나가기</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function StatsTab({diaries}) {
       const [subTab, setSubTab] = useState("all");
       const allEmo = {}; diaries.forEach(d=>(d.emotions||[]).forEach(e=>{allEmo[e.key]=(allEmo[e.key]||0)+e.intensity;}));
@@ -1380,14 +1882,7 @@ ${chatHistory}
             )}
             {mainTab==="stats" && <StatsTab diaries={diaries}/>}
             {mainTab==="mypage" && <MyPage diaries={diaries} streak={streak}/>}
-            {mainTab==="community" && (
-              <div style={{textAlign:"center", padding:"80px 20px", color:T.textSub}}>
-                <div style={{fontSize:48, marginBottom:16}}>🔗</div>
-                <div style={{fontSize:17, fontWeight:700, color:T.text, marginBottom:8}}>결이 맞는 사람들</div>
-                <div style={{fontSize:14, lineHeight:1.8, color:T.textSub, maxWidth:280, margin:"0 auto"}}>기록이 쌓이면, 당신의 결과 공명하는 사람들을 만날 수 있게 될 거예요.</div>
-                <div style={{marginTop:24, padding:"12px 24px", borderRadius:20, background:T.accentBg, display:"inline-block", fontSize:13, color:T.accent, fontWeight:600}}>곧 오픈 예정</div>
-              </div>
-            )}
+            {mainTab==="community" && <CommunityTab diaries={diaries} />}
           </div>
 
           <div style={{background:T.card, borderTop:`1px solid ${T.border}`, display:"flex", paddingBottom:`env(safe-area-inset-bottom,0px)`, flexShrink:0}}>
