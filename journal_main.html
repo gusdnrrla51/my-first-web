@@ -1212,6 +1212,7 @@ ${diaryCtx}`;
     function CommunityTab({ diaries }) {
       const { user } = useAuth();
       const [mbti, setMbti] = useState(null);
+      const [mbtiUpdatedAt, setMbtiUpdatedAt] = useState(null);
       const [analyzing, setAnalyzing] = useState(false);
       const [loadingProfile, setLoadingProfile] = useState(true);
       const [confidence, setConfidence] = useState(null);
@@ -1221,13 +1222,29 @@ ${diaryCtx}`;
 
       const myTemperament = mbti ? TEMPERAMENT_MAP[mbti] : null;
 
+      // 7일 쿨다운 계산
+      const COOLDOWN_DAYS = 7;
+      const cooldownRemaining = (() => {
+        if (!mbtiUpdatedAt) return 0;
+        const updated = new Date(mbtiUpdatedAt);
+        const now = new Date();
+        const diffMs = now - updated;
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+        const remaining = Math.ceil(COOLDOWN_DAYS - diffDays);
+        return remaining > 0 ? remaining : 0;
+      })();
+      const canReanalyze = cooldownRemaining === 0;
+
       // 프로필 로드
       useEffect(() => {
         if (!user) return;
         (async () => {
           setLoadingProfile(true);
           const { data } = await sb.from('user_profiles').select('mbti, mbti_updated_at').eq('user_id', user.id).single();
-          if (data?.mbti) setMbti(data.mbti);
+          if (data?.mbti) {
+            setMbti(data.mbti);
+            setMbtiUpdatedAt(data.mbti_updated_at);
+          }
           // 내가 참여한 방 로드
           const { data: members } = await sb.from('mbti_chat_members').select('room_id, mbti_chat_rooms(mbti, room_type)').eq('user_id', user.id);
           if (members) setMyRooms(members.map(m => ({ room_id: m.room_id, mbti: m.mbti_chat_rooms?.mbti, room_type: m.mbti_chat_rooms?.room_type })));
@@ -1266,10 +1283,15 @@ ${diaryCtx}`;
       };
 
       const handleAnalyze = async () => {
+        if (mbti && !canReanalyze) {
+          alert(`MBTI는 ${COOLDOWN_DAYS}일간 유지됩니다. ${cooldownRemaining}일 후 재분석할 수 있어요.`);
+          return;
+        }
         setAnalyzing(true);
         const result = await analyzeMBTI(diaries, user.id, user.name);
         if (result) {
           setMbti(result.mbti);
+          setMbtiUpdatedAt(new Date().toISOString());
           setConfidence(result.confidence);
           await autoJoinGroupRoom(result.mbti);
         } else {
@@ -1302,7 +1324,8 @@ ${diaryCtx}`;
       };
 
       if (currentRoom) {
-        return <ChatRoom roomId={currentRoom.room_id} mbti={currentRoom.mbti} onBack={() => setCurrentRoom(null)} />;
+        const isMyGroupRoom = currentRoom.mbti === myTemperament;
+        return <ChatRoom roomId={currentRoom.room_id} mbti={currentRoom.mbti} onBack={() => setCurrentRoom(null)} lockLeave={isMyGroupRoom && !canReanalyze} cooldownRemaining={cooldownRemaining} />;
       }
 
       if (loadingProfile) {
@@ -1360,11 +1383,16 @@ ${diaryCtx}`;
                 </div>
                 <div style={{ fontSize: 14, opacity: 0.9, marginTop: 4 }}>{MBTI_DESCRIPTIONS[mbti] || ""}</div>
               </div>
-              <button onClick={handleAnalyze} disabled={analyzing}
-                style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", minHeight: 36 }}>
-                {analyzing ? "분석 중..." : "재분석"}
+              <button onClick={handleAnalyze} disabled={analyzing || !canReanalyze}
+                style={{ background: canReanalyze ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)", border: "none", borderRadius: 10, padding: "8px 14px", color: "#fff", fontSize: 12, fontWeight: 600, cursor: canReanalyze ? "pointer" : "default", minHeight: 36, opacity: canReanalyze ? 1 : 0.6 }}>
+                {analyzing ? "분석 중..." : canReanalyze ? "재분석" : `${cooldownRemaining}일 후 가능`}
               </button>
             </div>
+            {!canReanalyze && (
+              <div style={{ marginTop: 12, fontSize: 11, opacity: 0.7, display: "flex", alignItems: "center", gap: 6 }}>
+                🔒 {cooldownRemaining}일간 유형이 유지됩니다 · {mbtiUpdatedAt ? new Date(mbtiUpdatedAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) + ' 분석' : ''}
+              </div>
+            )}
             {confidence && (
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.2)", fontSize: 12, lineHeight: 1.8, opacity: 0.85 }}>
                 {Object.entries(confidence).map(([k, v]) => (
@@ -1459,7 +1487,7 @@ ${diaryCtx}`;
     // ========================================================
     // 💬 ChatRoom — MBTI 채팅방
     // ========================================================
-    function ChatRoom({ roomId, mbti, onBack }) {
+    function ChatRoom({ roomId, mbti, onBack, lockLeave = false, cooldownRemaining = 0 }) {
       const { user } = useAuth();
       const [messages, setMessages] = useState([]);
       const [input, setInput] = useState("");
@@ -1571,10 +1599,16 @@ ${diaryCtx}`;
                 <div style={{ fontSize: 11, color: T.textSub }}>{members.length}명 참여 중</div>
               </div>
             </div>
-            <button onClick={() => setShowLeaveConfirm(true)}
-              style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.danger, fontWeight: 600, cursor: "pointer", minHeight: 36 }}>
-              나가기
-            </button>
+            {lockLeave ? (
+              <div style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 11, color: T.textSub, fontWeight: 500, minHeight: 36, display: "flex", alignItems: "center" }}>
+                🔒 {cooldownRemaining}일 후 변경 가능
+              </div>
+            ) : (
+              <button onClick={() => setShowLeaveConfirm(true)}
+                style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, color: T.danger, fontWeight: 600, cursor: "pointer", minHeight: 36 }}>
+                나가기
+              </button>
+            )}
           </div>
 
           {/* 메시지 영역 */}
