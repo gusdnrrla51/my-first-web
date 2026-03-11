@@ -95,7 +95,7 @@
 
     // NVC 느낌말 기반 감정 카테고리
     const EMOTION_CATEGORIES = [
-      { label:"욕구가 충족되었을 때", groups: [
+      { label:"긍정", groups: [
         { group:"감동·감사", color:"#C4A265", emotions: [
           {key:"moved",emoji:"🥹",label:"감동받은"}, {key:"grateful",emoji:"🥰",label:"감사한"}, {key:"fulfilled",emoji:"😇",label:"충만한"}, {key:"ecstatic",emoji:"🤩",label:"황홀한"},
         ]},
@@ -112,7 +112,7 @@
           {key:"energetic",emoji:"⚡",label:"활기찬"}, {key:"confident",emoji:"😎",label:"자신감 있는"}, {key:"hopeful",emoji:"✨",label:"기대에 부푼"}, {key:"brave",emoji:"🦁",label:"용기 나는"},
         ]},
       ]},
-      { label:"욕구가 충족되지 않았을 때", groups: [
+      { label:"부정", groups: [
         { group:"두려움·불안", color:"#A688B0", emotions: [
           {key:"anxious",emoji:"😰",label:"불안한"}, {key:"worried",emoji:"😟",label:"걱정되는"}, {key:"scared",emoji:"😨",label:"두려운"}, {key:"nervous",emoji:"😬",label:"긴장한"},
         ]},
@@ -524,6 +524,84 @@
     // ========================================================
     // ✏️ DiaryWritePage
     // ========================================================
+    // ========================================================
+    // 🎭 EmotionSelector — 긍정/부정 탭 + 감정 칩 + 컴팩트 강도
+    // ========================================================
+    function EmotionSelector({selEmotions, setSelEmotions, maxEmotions=5}) {
+      const [activeTab, setActiveTab] = useState(0);
+      const toggleEmo = k => {
+        const ex = selEmotions.find(e=>e.key===k);
+        if (ex) setSelEmotions(selEmotions.filter(e=>e.key!==k));
+        else if (selEmotions.length < maxEmotions) setSelEmotions([...selEmotions, {key:k, intensity:2}]);
+      };
+      const setIntensity = (k,v) => setSelEmotions(selEmotions.map(e=>e.key===k?{...e,intensity:v}:e));
+      const currentGroups = EMOTION_CATEGORIES[activeTab].groups;
+      return (
+        <div style={{background:T.card, borderRadius:16, padding:"18px 20px", marginBottom:14, boxShadow:T.shadow}}>
+          <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:4}}>오늘 어떤 감정을 느꼈나요?</div>
+          <div style={{fontSize:12, color:T.textSub, marginBottom:14}}>감정을 선택하면 일기를 작성할 수 있어요 (최대 {maxEmotions}개)</div>
+
+          {/* 긍정/부정 세그먼트 탭 */}
+          <div style={{display:"flex", borderRadius:12, background:T.bg, padding:3, marginBottom:16, border:`1px solid ${T.border}`}}>
+            {EMOTION_CATEGORIES.map((cat,i)=>(
+              <button key={i} onClick={()=>setActiveTab(i)} style={{flex:1, padding:"10px 0", borderRadius:10, border:"none", fontSize:14, fontWeight:activeTab===i?700:500, cursor:"pointer", background:activeTab===i?T.card:"transparent", color:activeTab===i?T.text:T.textSub, boxShadow:activeTab===i?"0 1px 4px rgba(0,0,0,0.08)":"none", transition:"all 0.2s"}}>
+                {i===0?"😊":"😢"} {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 그룹별 감정 칩 — 바로 노출 */}
+          <div style={{display:"flex", flexDirection:"column", gap:14}}>
+            {currentGroups.map((g,gi)=>(
+              <div key={gi}>
+                <div style={{fontSize:11, fontWeight:700, color:g.color, marginBottom:8, paddingLeft:2, display:"flex", alignItems:"center", gap:6}}>
+                  <span style={{width:6, height:6, borderRadius:"50%", background:g.color, display:"inline-block"}}/>
+                  {g.group}
+                </div>
+                <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
+                  {g.emotions.map(emo=>{
+                    const sel = selEmotions.find(x=>x.key===emo.key);
+                    const disabled = !sel && selEmotions.length >= maxEmotions;
+                    return (
+                      <button key={emo.key} onClick={()=>!disabled&&toggleEmo(emo.key)}
+                        style={{padding:"7px 14px", borderRadius:20, border:`1.5px solid ${sel?g.color:T.border}`, background:sel?g.color+"22":"#fff", fontSize:13, cursor:disabled?"default":"pointer", color:sel?T.text:T.textSub, fontWeight:sel?600:400, opacity:disabled?0.4:1, transition:"all 0.15s", transform:sel?"scale(1.03)":"scale(1)"}}>
+                        {emo.emoji} {emo.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 선택된 감정 요약 + 컴팩트 강도 선택 */}
+          {selEmotions.length>0 && (
+            <div style={{marginTop:16, padding:"14px 16px", background:T.accentBg, borderRadius:14, animation:"fadeIn 0.2s ease"}}>
+              <div style={{fontSize:12, fontWeight:700, color:T.accent, marginBottom:10}}>선택한 감정 {selEmotions.length}/{maxEmotions}</div>
+              <div style={{display:"flex", flexDirection:"column", gap:10}}>
+                {selEmotions.map(e=>(
+                  <div key={e.key} style={{display:"flex", alignItems:"center", gap:8, background:"#fff", borderRadius:12, padding:"8px 12px", border:`1px solid ${EMOTIONS[e.key].color}33`}}>
+                    <button onClick={()=>toggleEmo(e.key)} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, color:T.text, display:"flex", alignItems:"center", gap:4, padding:0, flexShrink:0}}>
+                      {EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label} <span style={{fontSize:10, opacity:0.5, marginLeft:2}}>✕</span>
+                    </button>
+                    <div style={{display:"flex", gap:4, marginLeft:"auto", alignItems:"center"}}>
+                      {INTENSITY.map((label,i)=>(
+                        <button key={i} onClick={()=>setIntensity(e.key,i+1)} title={label}
+                          style={{width:e.intensity===i+1?26:18, height:e.intensity===i+1?26:18, borderRadius:"50%", border:`2px solid ${e.intensity===i+1?EMOTIONS[e.key].color:T.border}`, background:e.intensity===i+1?EMOTIONS[e.key].color:"transparent", cursor:"pointer", padding:0, transition:"all 0.15s", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700, color:e.intensity===i+1?"#fff":T.textSub}}>
+                          {e.intensity===i+1?(i+1):""}
+                        </button>
+                      ))}
+                      <span style={{fontSize:10, color:T.textSub, marginLeft:4, minWidth:32}}>{INTENSITY[(e.intensity||2)-1]}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function DiaryWritePage({onSave, onCancel, editData}) {
       const {user} = useAuth();
       const DRAFT_KEY = `gyeol_draft_${today()}`;
@@ -533,16 +611,17 @@
       const [content, setContent] = useState(_init?.content||"");
       const [selEmotions, setSelEmotions] = useState(_init?.emotions||[]);
       const [saving, setSaving] = useState(false);
-      const [openEmoGroup, setOpenEmoGroup] = useState(null);
       const [photoFile, setPhotoFile] = useState(null);
       const [photoPreview, setPhotoPreview] = useState(null);
-      // 기존 사진(editData) 또는 임시 저장(draft) 사진이 있으면 signed URL로 미리보기 로드
+      const writingSectionRef = useRef(null);
+      const scrollContainerRef = useRef(null);
+
       useEffect(() => {
         const photoPath = editData?.photo_url || _draft?.photo_url;
         if (photoPath) getPhotoUrl(photoPath).then(setPhotoPreview);
       }, []);
 
-      // 자동 임시 저장 — 변경될 때마다 localStorage에 백업
+      // 자동 임시 저장
       useEffect(() => {
         const hasAny = title || content || selEmotions.length > 0;
         if (hasAny) {
@@ -550,28 +629,28 @@
         }
       }, [title, content, selEmotions, photoPreview]);
 
-      const toggleEmo = k => {
-        const ex = selEmotions.find(e=>e.key===k);
-        if (ex) setSelEmotions(selEmotions.filter(e=>e.key!==k));
-        else if (selEmotions.length < 5) setSelEmotions([...selEmotions, {key:k, intensity:2}]);
-      };
-      const setIntensity = (k,v) => setSelEmotions(selEmotions.map(e=>e.key===k?{...e,intensity:v}:e));
+      // 첫 감정 선택 시 자동 스크롤
+      const prevEmoCount = useRef(selEmotions.length);
+      useEffect(() => {
+        if (prevEmoCount.current === 0 && selEmotions.length === 1 && writingSectionRef.current) {
+          setTimeout(() => writingSectionRef.current.scrollIntoView({ behavior:'smooth', block:'start' }), 150);
+        }
+        prevEmoCount.current = selEmotions.length;
+      }, [selEmotions.length]);
+
       const handleSave = async () => {
         if (!title.trim()||!content.trim()||selEmotions.length===0) {
           alert("제목, 내용, 감정을 모두 입력해주세요."); return;
         }
         setSaving(true);
-        let photo_url = !photoPreview ? null : (editData?.photo_url || null); // 미리보기 없으면 사진 삭제, 있으면 기존 경로 유지
-        // 새 사진 파일이 있으면 Supabase Storage에 업로드
+        let photo_url = !photoPreview ? null : (editData?.photo_url || null);
         if (photoFile) {
           try {
             const ext = photoFile.name.split('.').pop();
             const path = `diary_photos/${user.id}/${today()}_${Date.now()}.${ext}`;
             const { data: upData, error: upErr } = await sb.storage.from('diary-photos').upload(path, photoFile, { upsert: true });
             if (upErr) { console.error("사진 업로드 오류:", upErr); }
-            else {
-              photo_url = path; // private 버킷이므로 경로만 저장, 표시할 때 signed URL 생성
-            }
+            else { photo_url = path; }
           } catch(e) { console.error("사진 업로드 실패:", e); }
         }
         await onSave({ title, content, emotions:selEmotions, activities:[], places:[], people:[], purchases:[], photo_url: photo_url || null, date:today() });
@@ -581,6 +660,7 @@
 
       const sec = {background:T.card, borderRadius:16, padding:"18px 20px", marginBottom:14, boxShadow:T.shadow};
       const inp = { width:"100%", padding:"12px 14px", borderRadius:12, border:`1px solid ${T.border}`, background:T.bg, fontSize:16, color:T.text, outline:"none", boxSizing:"border-box", WebkitAppearance:"none" };
+      const hasEmotions = selEmotions.length > 0;
 
       return (
           <div style={{position:"fixed", inset:0, background:T.bg, zIndex:100, display:"flex", flexDirection:"column"}}>
@@ -588,131 +668,70 @@
             <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 20px", paddingTop:`calc(env(safe-area-inset-top,0px) + 12px)`, paddingBottom:12, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
               <button onClick={onCancel} style={{background:"none", border:"none", color:T.textSub, fontSize:15, cursor:"pointer", padding:"8px 0", minWidth:60, minHeight:44, textAlign:"left"}}>← 취소</button>
               <div style={{fontSize:16, fontWeight:700, color:T.text}}>{editData?"일기 수정":"오늘의 하루"}</div>
-              <button onClick={handleSave} disabled={saving} style={{background:T.accent, color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:14, fontWeight:700, cursor:"pointer", minHeight:44, opacity:saving?0.7:1}}>
+              <button onClick={handleSave} disabled={saving||!hasEmotions} style={{background:T.accent, color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:14, fontWeight:700, cursor:"pointer", minHeight:44, opacity:(saving||!hasEmotions)?0.5:1}}>
                 {saving?"저장 중...":"저장"}
               </button>
             </div>
 
             {/* 스크롤 본문 */}
-            <div style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:"20px 16px", paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 20px)`}}>
+            <div ref={scrollContainerRef} style={{flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:"20px 16px", paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 20px)`}}>
               <div style={{fontSize:13, color:T.textSub, textAlign:"center", marginBottom:16}}>{fmtFull(today())}</div>
 
-              {/* 제목 */}
-              <div style={sec}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 제목</div>
-                <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="오늘 하루를 한 문장으로 표현한다면?" style={inp}/>
-              </div>
+              {/* 1단계: 감정 선택 (항상 표시) */}
+              <EmotionSelector selEmotions={selEmotions} setSelEmotions={setSelEmotions}/>
 
-              {/* 본문 */}
-              <div style={sec}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 이야기</div>
-                <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="오늘 있었던 일을 솔직하게 적어보세요." rows={5}
-                  style={{...inp, resize:"none", lineHeight:1.7, fontFamily:"'Noto Sans KR',sans-serif"}}/>
-              </div>
+              {/* 감정 미선택 시 안내 */}
+              {!hasEmotions && (
+                <div style={{textAlign:"center", padding:"32px 20px", color:T.textSub, fontSize:13, animation:"fadeIn 0.3s ease"}}>
+                  ✍️ 감정을 선택하면 일기 작성 영역이 나타나요
+                </div>
+              )}
 
-              {/* 감정 */}
-              <div style={sec}>
-                <div style={{fontSize:14, fontWeight:700, color:T.text, marginBottom:14}}>🎭 감정</div>
-                  <div style={{fontSize:12, color:T.textSub, marginBottom:10}}>오늘 느낀 감정을 선택해보세요 (최대 5개)</div>
-                  {/* 선택된 감정이 있으면 상단에 표시 */}
-                  {selEmotions.length>0 && (
-                    <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12, padding:"10px 12px", background:T.accentBg, borderRadius:12}}>
-                      {selEmotions.map(e=>(
-                        <button key={e.key} onClick={()=>toggleEmo(e.key)}
-                          style={{padding:"5px 10px", borderRadius:16, border:`1.5px solid ${EMOTIONS[e.key].color}`, background:EMOTIONS[e.key].color+"22", fontSize:12, cursor:"pointer", color:T.text, fontWeight:600, display:"flex", alignItems:"center", gap:4}}>
-                          {EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label} <span style={{fontSize:10, opacity:0.6}}>✕</span>
-                        </button>
-                      ))}
-                      <span style={{fontSize:11, color:T.textSub, alignSelf:"center"}}>{selEmotions.length}/5</span>
-                    </div>
-                  )}
-                  {/* 감정 그룹을 아코디언으로 표시 */}
-                  {EMOTION_CATEGORIES.map((cat, ci) => (
-                    <div key={ci} style={{marginBottom:10}}>
-                      <div style={{fontSize:11, fontWeight:700, color:T.accent, marginBottom:6, padding:"4px 0"}}>{cat.label}</div>
-                      <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                        {cat.groups.map((g, gi) => {
-                          const hasSelected = g.emotions.some(emo => selEmotions.find(x=>x.key===emo.key));
-                          const isOpen = openEmoGroup === `${ci}-${gi}`;
-                          return (
-                            <React.Fragment key={gi}>
-                              <button onClick={()=>setOpenEmoGroup(isOpen?null:`${ci}-${gi}`)}
-                                style={{padding:"8px 14px", borderRadius:20, border:`1.5px solid ${hasSelected?g.color:isOpen?g.color:T.border}`, background:hasSelected?g.color+"22":isOpen?g.color+"11":T.bg, fontSize:12, cursor:"pointer", color:hasSelected||isOpen?T.text:T.textSub, fontWeight:hasSelected?700:isOpen?600:400, minHeight:36, display:"flex", alignItems:"center", gap:4, transition:"all 0.15s"}}>
-                                {g.emotions[0].emoji} {g.group} {hasSelected && <span style={{fontSize:10, background:g.color, color:"#fff", borderRadius:10, padding:"1px 6px", fontWeight:700}}>{g.emotions.filter(emo=>selEmotions.find(x=>x.key===emo.key)).length}</span>}
-                                <span style={{fontSize:10, marginLeft:2, transition:"transform 0.2s", transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>▼</span>
-                              </button>
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                      {/* 열린 그룹의 감정 목록 */}
-                      {cat.groups.map((g, gi) => {
-                        const isOpen = openEmoGroup === `${ci}-${gi}`;
-                        if (!isOpen) return null;
-                        return (
-                          <div key={`detail-${gi}`} style={{marginTop:8, padding:"10px 12px", background:g.color+"0D", borderRadius:12, border:`1px solid ${g.color}33`, animation:"fadeIn 0.2s ease"}}>
-                            <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                              {g.emotions.map(emo => {
-                                const sel = selEmotions.find(x=>x.key===emo.key);
-                                return (
-                                  <button key={emo.key} onClick={()=>toggleEmo(emo.key)}
-                                    style={{padding:"8px 14px", borderRadius:20, border:`1.5px solid ${sel?g.color:T.border}`, background:sel?g.color+"22":"#fff", fontSize:13, cursor:"pointer", color:sel?T.text:T.textSub, fontWeight:sel?600:400, minHeight:38, transition:"all 0.15s"}}>
-                                    {emo.emoji} {emo.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                  {selEmotions.length>0 && (
-                    <div style={{display:"flex", flexDirection:"column", gap:12}}>
-                      {selEmotions.map(e=>(
-                        <div key={e.key}>
-                          <div style={{fontSize:13, fontWeight:600, color:T.text, marginBottom:6}}>{EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label} 강도</div>
-                          <div style={{display:"flex", gap:6}}>
-                            {INTENSITY.map((label,i)=>(
-                              <button key={i} onClick={()=>setIntensity(e.key,i+1)}
-                                style={{flex:1, padding:"8px 4px", borderRadius:8, border:`1px solid ${e.intensity===i+1?EMOTIONS[e.key].color:T.border}`, background:e.intensity===i+1?EMOTIONS[e.key].color+"33":"transparent", fontSize:11, color:e.intensity===i+1?T.text:T.textSub, cursor:"pointer", fontWeight:e.intensity===i+1?700:400, minHeight:40}}>
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-              </div>
-
-              {/* 오늘의 사진 */}
-              <div style={sec}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>📷 오늘의 사진</div>
-                {photoPreview ? (
-                  <div style={{position:"relative"}}>
-                    <img src={photoPreview} alt="오늘의 사진" style={{width:"100%", borderRadius:12, maxHeight:300, objectFit:"cover"}}/>
-                    <button onClick={()=>{setPhotoFile(null); setPhotoPreview(null);}}
-                      style={{position:"absolute", top:8, right:8, width:32, height:32, borderRadius:"50%", background:"rgba(0,0,0,0.5)", color:"#fff", border:"none", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>×</button>
+              {/* 2단계: 일기 작성 (감정 선택 후 노출) */}
+              {hasEmotions && (
+                <div ref={writingSectionRef} style={{animation:"slideUp 0.4s ease"}}>
+                  {/* 제목 */}
+                  <div style={sec}>
+                    <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 제목</div>
+                    <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="오늘 하루를 한 문장으로 표현한다면?" style={inp}/>
                   </div>
-                ) : (
-                  <label style={{display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"28px 16px", border:`2px dashed ${T.border}`, borderRadius:14, cursor:"pointer", background:T.bg, transition:"all 0.2s"}}>
-                    <span style={{fontSize:32, marginBottom:8}}>📷</span>
-                    <span style={{fontSize:13, color:T.textSub, fontWeight:500}}>사진을 선택해주세요</span>
-                    <span style={{fontSize:11, color:T.textMuted, marginTop:4}}>최대 2MB · JPG, PNG, WEBP</span>
-                    <input type="file" accept="image/jpeg,image/png,image/webp" style={{display:"none"}}
-                      onChange={e=>{
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        if (file.size > 2*1024*1024) { alert("사진 크기가 2MB를 초과합니다. 더 작은 사진을 선택해주세요."); return; }
-                        setPhotoFile(file);
-                        const reader = new FileReader();
-                        reader.onload = ev => setPhotoPreview(ev.target.result);
-                        reader.readAsDataURL(file);
-                      }}/>
-                  </label>
-                )}
-              </div>
+
+                  {/* 본문 */}
+                  <div style={sec}>
+                    <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:8}}>오늘의 이야기</div>
+                    <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="오늘 있었던 일을 솔직하게 적어보세요." rows={5}
+                      style={{...inp, resize:"none", lineHeight:1.7, fontFamily:"'Noto Sans KR',sans-serif"}}/>
+                  </div>
+
+                  {/* 오늘의 사진 */}
+                  <div style={sec}>
+                    <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>📷 오늘의 사진</div>
+                    {photoPreview ? (
+                      <div style={{position:"relative"}}>
+                        <img src={photoPreview} alt="오늘의 사진" style={{width:"100%", borderRadius:12, maxHeight:300, objectFit:"cover"}}/>
+                        <button onClick={()=>{setPhotoFile(null); setPhotoPreview(null);}}
+                          style={{position:"absolute", top:8, right:8, width:32, height:32, borderRadius:"50%", background:"rgba(0,0,0,0.5)", color:"#fff", border:"none", fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center"}}>×</button>
+                      </div>
+                    ) : (
+                      <label style={{display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"28px 16px", border:`2px dashed ${T.border}`, borderRadius:14, cursor:"pointer", background:T.bg, transition:"all 0.2s"}}>
+                        <span style={{fontSize:32, marginBottom:8}}>📷</span>
+                        <span style={{fontSize:13, color:T.textSub, fontWeight:500}}>사진을 선택해주세요</span>
+                        <span style={{fontSize:11, color:T.textMuted, marginTop:4}}>최대 2MB · JPG, PNG, WEBP</span>
+                        <input type="file" accept="image/jpeg,image/png,image/webp" style={{display:"none"}}
+                          onChange={e=>{
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 2*1024*1024) { alert("사진 크기가 2MB를 초과합니다. 더 작은 사진을 선택해주세요."); return; }
+                            setPhotoFile(file);
+                            const reader = new FileReader();
+                            reader.onload = ev => setPhotoPreview(ev.target.result);
+                            reader.readAsDataURL(file);
+                          }}/>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
       );
