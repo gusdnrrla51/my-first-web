@@ -532,31 +532,23 @@
       const [title, setTitle] = useState(_init?.title||"");
       const [content, setContent] = useState(_init?.content||"");
       const [selEmotions, setSelEmotions] = useState(_init?.emotions||[]);
-      const [selActivities, setSelActivities] = useState(_init?.activities||[]);
-      const [places, setPlaces] = useState(_init?.places||[]);
-      const [people, setPeople] = useState(_init?.people||[]);
-      const [purchases, setPurchases] = useState(_init?.purchases||[]);
-      const [tab, setTab] = useState("emotion");
       const [saving, setSaving] = useState(false);
       const [openEmoGroup, setOpenEmoGroup] = useState(null);
       const [photoFile, setPhotoFile] = useState(null);
       const [photoPreview, setPhotoPreview] = useState(null);
-      const [newPlace, setNewPlace] = useState("");
       // 기존 사진(editData) 또는 임시 저장(draft) 사진이 있으면 signed URL로 미리보기 로드
       useEffect(() => {
         const photoPath = editData?.photo_url || _draft?.photo_url;
         if (photoPath) getPhotoUrl(photoPath).then(setPhotoPreview);
       }, []);
-      const [newPerson, setNewPerson] = useState("");
-      const [newPurchase, setNewPurchase] = useState("");
 
       // 자동 임시 저장 — 변경될 때마다 localStorage에 백업
       useEffect(() => {
-        const hasAny = title || content || selEmotions.length > 0 || selActivities.length > 0 || places.length > 0 || people.length > 0 || purchases.length > 0;
+        const hasAny = title || content || selEmotions.length > 0;
         if (hasAny) {
-          localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, content, emotions: selEmotions, activities: selActivities, places, people, purchases, photo_url: photoPreview }));
+          localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, content, emotions: selEmotions, photo_url: photoPreview }));
         }
-      }, [title, content, selEmotions, selActivities, places, people, purchases, photoPreview]);
+      }, [title, content, selEmotions, photoPreview]);
 
       const toggleEmo = k => {
         const ex = selEmotions.find(e=>e.key===k);
@@ -564,27 +556,6 @@
         else if (selEmotions.length < 5) setSelEmotions([...selEmotions, {key:k, intensity:2}]);
       };
       const setIntensity = (k,v) => setSelEmotions(selEmotions.map(e=>e.key===k?{...e,intensity:v}:e));
-      const toggleAct = a => setSelActivities(selActivities.includes(a)?selActivities.filter(x=>x!==a):[...selActivities,a]);
-
-      const addPlace = () => {
-        const v = newPlace.trim();
-        if (!v) return;
-        setPlaces(prev => [...prev, { name: v }]);
-        setNewPlace("");
-      };
-      const addPerson = () => {
-        const v = newPerson.trim();
-        if (!v) return;
-        setPeople(prev => [...prev, v]);
-        setNewPerson("");
-      };
-      const addPurchase = () => {
-        const v = newPurchase.trim();
-        if (!v) return;
-        setPurchases(prev => [...prev, v]);
-        setNewPurchase("");
-      };
-
       const handleSave = async () => {
         if (!title.trim()||!content.trim()||selEmotions.length===0) {
           alert("제목, 내용, 감정을 모두 입력해주세요."); return;
@@ -603,7 +574,7 @@
             }
           } catch(e) { console.error("사진 업로드 실패:", e); }
         }
-        await onSave({ title, content, emotions:selEmotions, activities:selActivities, places, people, purchases, photo_url: photo_url || null, date:today() });
+        await onSave({ title, content, emotions:selEmotions, activities:[], places:[], people:[], purchases:[], photo_url: photo_url || null, date:today() });
         localStorage.removeItem(DRAFT_KEY);
         setSaving(false);
       };
@@ -639,17 +610,9 @@
                   style={{...inp, resize:"none", lineHeight:1.7, fontFamily:"'Noto Sans KR',sans-serif"}}/>
               </div>
 
-              {/* 감정 / 활동 탭 */}
+              {/* 감정 */}
               <div style={sec}>
-                <div style={{display:"flex", borderBottom:`1px solid ${T.border}`, marginBottom:14}}>
-                  {["emotion","activity"].map(t=>(
-                    <button key={t} onClick={()=>setTab(t)}
-                      style={{flex:1, padding:"10px 0", border:"none", background:"none", fontSize:14, fontWeight:tab===t?700:500, color:tab===t?T.accent:T.textSub, borderBottom:`2px solid ${tab===t?T.accent:"transparent"}`, cursor:"pointer", marginBottom:-1}}>
-                      {t==="emotion"?"감정":"활동"}
-                    </button>
-                  ))}
-                </div>
-                {tab==="emotion" && (<>
+                <div style={{fontSize:14, fontWeight:700, color:T.text, marginBottom:14}}>🎭 감정</div>
                   <div style={{fontSize:12, color:T.textSub, marginBottom:10}}>오늘 느낀 감정을 선택해보세요 (최대 5개)</div>
                   {/* 선택된 감정이 있으면 상단에 표시 */}
                   {selEmotions.length>0 && (
@@ -721,92 +684,6 @@
                       ))}
                     </div>
                   )}
-                </>)}
-                {tab==="activity" && (
-                  <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
-                    {ACTIVITIES.map(a=>{
-                      const sel=selActivities.includes(a);
-                      return (
-                        <button key={a} onClick={()=>toggleAct(a)}
-                          style={{padding:"9px 14px", borderRadius:20, border:`1.5px solid ${sel?T.accent:T.border}`, background:sel?T.accentBg:T.bg, fontSize:13, cursor:"pointer", color:sel?T.accent:T.textSub, fontWeight:sel?600:400, minHeight:40}}>
-                          {a}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* 방문 장소 섹션 — 텍스트 입력 */}
-              <div style={sec}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>📍 오늘 방문한 곳</div>
-                <div style={{display:"flex", gap:8, marginBottom:10}}>
-                  <input value={newPlace} onChange={e=>setNewPlace(e.target.value)}
-                    onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault(); addPlace();}}}
-                    placeholder="장소 이름을 입력하세요"
-                    style={{...inp, flex:1, marginBottom:0}}/>
-                  <button onClick={addPlace} disabled={!newPlace.trim()}
-                    style={{padding:"0 16px", background:newPlace.trim()?T.accent:T.border, color:"#fff", border:"none", borderRadius:12, fontSize:13, fontWeight:700, cursor:newPlace.trim()?"pointer":"default", minHeight:44, flexShrink:0, opacity:newPlace.trim()?1:0.6}}>추가</button>
-                </div>
-                {places.length > 0 && (
-                  <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                    {places.map((p,i)=>(
-                      <span key={i} style={{display:"flex", alignItems:"center", gap:4, padding:"7px 12px", borderRadius:20, background:T.accentBg, border:`1px solid ${T.accentLight}`, fontSize:13, color:T.text, fontWeight:500}}>
-                        📍 {p.name}
-                        <button onClick={()=>setPlaces(places.filter((_,j)=>j!==i))}
-                          style={{background:"none", border:"none", fontSize:14, color:T.textSub, cursor:"pointer", padding:0, marginLeft:2, lineHeight:1}}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 만난 사람 섹션 */}
-              <div style={sec}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>👥 인상 깊게 만난 사람</div>
-                <div style={{display:"flex", gap:8, marginBottom:10}}>
-                  <input value={newPerson} onChange={e=>setNewPerson(e.target.value)}
-                    onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault(); addPerson();}}}
-                    placeholder="이름을 입력하세요"
-                    style={{...inp, flex:1, marginBottom:0}}/>
-                  <button onClick={addPerson} disabled={!newPerson.trim()}
-                    style={{padding:"0 16px", background:newPerson.trim()?T.accent:T.border, color:"#fff", border:"none", borderRadius:12, fontSize:13, fontWeight:700, cursor:newPerson.trim()?"pointer":"default", minHeight:44, flexShrink:0, opacity:newPerson.trim()?1:0.6}}>추가</button>
-                </div>
-                {people.length > 0 && (
-                  <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                    {people.map((name,i)=>(
-                      <span key={i} style={{display:"flex", alignItems:"center", gap:4, padding:"7px 12px", borderRadius:20, background:"#E8F0F8", border:"1px solid #C5D8EA", fontSize:13, color:T.text, fontWeight:500}}>
-                        👤 {name}
-                        <button onClick={()=>setPeople(people.filter((_,j)=>j!==i))}
-                          style={{background:"none", border:"none", fontSize:14, color:T.textSub, cursor:"pointer", padding:0, marginLeft:2, lineHeight:1}}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 구매한 것 섹션 */}
-              <div style={sec}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>🛍️ 오늘 구매한 것</div>
-                <div style={{display:"flex", gap:8, marginBottom:10}}>
-                  <input value={newPurchase} onChange={e=>setNewPurchase(e.target.value)}
-                    onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault(); addPurchase();}}}
-                    placeholder="구매한 것을 입력하세요"
-                    style={{...inp, flex:1, marginBottom:0}}/>
-                  <button onClick={addPurchase} disabled={!newPurchase.trim()}
-                    style={{padding:"0 16px", background:newPurchase.trim()?T.accent:T.border, color:"#fff", border:"none", borderRadius:12, fontSize:13, fontWeight:700, cursor:newPurchase.trim()?"pointer":"default", minHeight:44, flexShrink:0, opacity:newPurchase.trim()?1:0.6}}>추가</button>
-                </div>
-                {purchases.length > 0 && (
-                  <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                    {purchases.map((item,i)=>(
-                      <span key={i} style={{display:"flex", alignItems:"center", gap:4, padding:"7px 12px", borderRadius:20, background:"#F5EDE3", border:"1px solid #E0D1BF", fontSize:13, color:T.text, fontWeight:500}}>
-                        🛍️ {item}
-                        <button onClick={()=>setPurchases(purchases.filter((_,j)=>j!==i))}
-                          style={{background:"none", border:"none", fontSize:14, color:T.textSub, cursor:"pointer", padding:0, marginLeft:2, lineHeight:1}}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* 오늘의 사진 */}
@@ -866,9 +743,9 @@
         (async () => {
           setLoading(true); setExpanded(true);
           const ctx = last7.map(d =>
-            `[${d.date}] 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"} / 활동: ${(d.activities||[]).join(", ")||"없음"}`
+            `[${d.date}] 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}`
           ).join("\n");
-          const prompt = `아래 최근 7일 일기를 따뜻하게 분석해주세요. 전체 5줄 이내로 간결하게.\n\n${ctx}\n\n💜 이번 주 감정 흐름 한 줄\n🏃 많이 한 활동 한 줄\n🌱 한마디 응원 (슬픔·불안이 주를 이루면 전문 상담 부드럽게 제안)`;
+          const prompt = `아래 최근 7일 일기를 따뜻하게 분석해주세요. 전체 5줄 이내로 간결하게.\n\n${ctx}\n\n💜 이번 주 감정 흐름 한 줄\n🌱 한마디 응원 (슬픔·불안이 주를 이루면 전문 상담 부드럽게 제안)`;
           try {
             const text = await callGemini(prompt);
             setSummary(text);
@@ -917,7 +794,7 @@
         if (initial) return; // 캐시된 분석 있으면 API 호출 안 함
         (async () => {
           try {
-            const ctx = `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${(diary.content||"").slice(0,200)}\n감정: ${(diary.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}\n활동: ${(diary.activities||[]).join(", ")||"없음"}`;
+            const ctx = `날짜: ${diary.date}\n제목: ${diary.title}\n내용: ${(diary.content||"").slice(0,200)}\n감정: ${(diary.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label}(강도${e.intensity})`).join(", ")||"없음"}`;
             const prompt = `아래 하루 일기를 따뜻하고 공감 있게 분석해주세요. 전체 5줄 이내로 간결하게.\n\n${ctx}\n\n💜 감정 한 줄\n✨ 오늘의 하이라이트 한 줄\n🌱 내일을 위한 한마디 (부정적 감정이 강하면 상담 제안 포함)`;
             const text = await callGemini(prompt);
             setAnalysis(text);
@@ -995,47 +872,6 @@
                 </div>
               ))}
             </div>
-            {(diary.activities||[]).length>0 && (
-              <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>활동</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                  {(diary.activities||[]).map(a=>(
-                    <span key={a} style={{padding:"7px 12px", borderRadius:14, background:T.accentBg, fontSize:13, color:T.accent, fontWeight:500}}>{a}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* ✅ 장소 섹션 — address + 구글 지도 표시 */}
-            {(diary.places||[]).length>0 && (
-              <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>📍 방문 장소</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                  {diary.places.map((p,i)=>(
-                    <span key={i} style={{padding:"7px 12px", borderRadius:14, background:T.accentBg, fontSize:13, color:T.text, fontWeight:500}}>📍 {p.name}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {(diary.people||[]).length>0 && (
-              <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>👥 만난 사람</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                  {diary.people.map((name,i)=>(
-                    <span key={i} style={{padding:"7px 12px", borderRadius:14, background:"#E8F0F8", fontSize:13, color:T.text, fontWeight:500}}>👤 {name}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {(diary.purchases||[]).length>0 && (
-              <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
-                <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>🛍️ 구매한 것</div>
-                <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                  {diary.purchases.map((item,i)=>(
-                    <span key={i} style={{padding:"7px 12px", borderRadius:14, background:"#F5EDE3", fontSize:13, color:T.text, fontWeight:500}}>🛍️ {item}</span>
-                  ))}
-                </div>
-              </div>
-            )}
             {diary.photo_url && signedPhotoUrl && (
               <div style={{background:T.card, borderRadius:16, padding:20, boxShadow:T.shadow}}>
                 <div style={{fontSize:13, fontWeight:700, color:T.text, marginBottom:10}}>📷 오늘의 사진</div>
@@ -1048,7 +884,7 @@
     }
 
     function AIChatModal({onClose, diaries}) {
-      const [msgs, setMsgs] = useState([{role:"ai", text:"안녕하세요! GYEOL AI예요 ☕\n\n기록된 일기를 바탕으로 당신의 결을 함께 들여다볼게요.\n\n이런 걸 물어볼 수 있어요:\n• \"내 감정 패턴이 어때?\"\n• \"자주 만나는 사람은 누구야?\"\n• \"내 소비 패턴을 분석해줘\"\n• \"내 결을 분석해줘\""}]);
+      const [msgs, setMsgs] = useState([{role:"ai", text:"안녕하세요! GYEOL AI예요 ☕\n\n기록된 일기를 바탕으로 당신의 결을 함께 들여다볼게요.\n\n이런 걸 물어볼 수 있어요:\n• \"내 감정 패턴이 어때?\"\n• \"요즘 내 기분은 어떤 흐름이야?\"\n• \"내 결을 분석해줘\""}]);
       const [input, setInput] = useState(""); const [loading, setLoading] = useState(false);
       const ref = useRef(null);
       useEffect(()=>{ref.current?.scrollTo(0, ref.current.scrollHeight);},[msgs]);
@@ -1057,7 +893,7 @@
         const recent = diaries.slice(0, 20);
         if (recent.length === 0) return "아직 기록된 일기가 없습니다.";
         return recent.map(d =>
-          `[${d.date}] "${d.title}" 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label||e.key}(강도${e.intensity})`).join(", ")||"없음"} / 활동: ${(d.activities||[]).join(", ")||"없음"} / 장소: ${(d.places||[]).map(p=>p.name).join(", ")||"없음"} / 만난 사람: ${(d.people||[]).join(", ")||"없음"} / 구매: ${(d.purchases||[]).join(", ")||"없음"}`
+          `[${d.date}] "${d.title}" 감정: ${(d.emotions||[]).map(e=>`${EMOTIONS[e.key]?.label||e.key}(강도${e.intensity})`).join(", ")||"없음"}`
         ).join("\n");
       };
 
@@ -1077,7 +913,7 @@ ${chatHistory}
 
 사용자의 질문: ${q}
 
-위 기록을 바탕으로 따뜻하고 공감 있게 답변해주세요. 5줄 이내로 간결하게. 감정 패턴, 활동 패턴, 장소 패턴, 인간관계 패턴, 소비 패턴 등을 분석해서 답변해주세요. 이모지를 적절히 사용해주세요.`;
+위 기록을 바탕으로 따뜻하고 공감 있게 답변해주세요. 5줄 이내로 간결하게. 감정 흐름과 패턴을 분석해서 답변해주세요. 이모지를 적절히 사용해주세요.`;
           const text = await callGemini(prompt);
           setMsgs(p=>[...p,{role:"ai",text}]);
         } catch(e) {
@@ -1120,10 +956,7 @@ ${chatHistory}
 
       const diaryCtx = recent.map(d => {
         const emos = (d.emotions||[]).map(e => `${EMOTIONS[e.key]?.label||e.key}(강도${e.intensity})`).join(", ") || "없음";
-        const acts = (d.activities||[]).join(", ") || "없음";
-        const ppl = (d.people||[]).join(", ") || "없음";
-        const places = (d.places||[]).map(p=>p.name).join(", ") || "없음";
-        return `[${d.date}]\n제목: ${d.title}\n내용: ${(d.content||"").slice(0,300)}\n감정: ${emos}\n활동: ${acts}\n만난 사람: ${ppl}\n장소: ${places}`;
+        return `[${d.date}]\n제목: ${d.title}\n내용: ${(d.content||"").slice(0,300)}\n감정: ${emos}`;
       }).join("\n\n---\n\n");
 
       const prompt = `당신은 MBTI 성격유형 분석 전문가입니다. 아래 사용자의 일기를 분석하여 MBTI를 추측해주세요. 일기가 적더라도 가능한 단서를 최대한 활용하여 추측하세요.
@@ -1915,38 +1748,21 @@ ${diaryCtx}`;
     }
 
     function StatsTab({diaries, onOpenAI}) {
-      const [subTab, setSubTab] = useState("all");
       const allEmo = {}; diaries.forEach(d=>(d.emotions||[]).forEach(e=>{allEmo[e.key]=(allEmo[e.key]||0)+e.intensity;}));
       const emoSorted = Object.entries(allEmo).sort((a,b)=>b[1]-a[1]); const maxEmo = emoSorted[0]?.[1]||1;
-      const allAct = {}; diaries.forEach(d=>(d.activities||[]).forEach(a=>{allAct[a]=(allAct[a]||0)+1;}));
-      const actSorted = Object.entries(allAct).sort((a,b)=>b[1]-a[1]); const maxAct = actSorted[0]?.[1]||1;
       if (diaries.length===0) return (<div style={{padding:"80px 20px", textAlign:"center"}}><div style={{fontSize:48, marginBottom:16}}>✨</div><div style={{fontSize:16, fontWeight:700, color:T.text, marginBottom:8}}>아직 기록이 없어요</div><div style={{fontSize:14, color:T.textSub, lineHeight:1.7}}>일기를 쓰기 시작하면<br/>나의 결이 보이기 시작해요.</div></div>);
       return (
         <div style={{padding:"20px 16px", paddingBottom:20}}>
           <div style={{fontSize:20, fontWeight:800, color:T.text, marginBottom:4}}>나의 결</div>
           <div style={{fontSize:13, color:T.textSub, marginBottom:14}}>기록이 쌓일수록 결이 선명해집니다</div>
           <button onClick={onOpenAI} style={{width:"100%", padding:"14px 18px", borderRadius:14, border:"none", background:T.gradient, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:16, minHeight:48, display:"flex", alignItems:"center", justifyContent:"center", gap:8, boxShadow:`0 4px 16px ${T.accent}44`}}>☕ AI에게 나의 결 물어보기</button>
-          <div style={{display:"flex", gap:8, marginBottom:16, overflowX:"auto", paddingBottom:4}}>
-            {[["all","전체"],["emotion","감정"],["activity","활동"]].map(([id,label])=>(
-              <button key={id} onClick={()=>setSubTab(id)} style={{padding:"9px 18px", borderRadius:20, border:`1.5px solid ${subTab===id?T.accent:T.border}`, background:subTab===id?T.accentBg:T.card, color:subTab===id?T.accent:T.textSub, fontSize:13, fontWeight:subTab===id?700:500, cursor:"pointer", whiteSpace:"nowrap", minHeight:40, flexShrink:0}}>{label}</button>
-            ))}
-          </div>
-          {(subTab==="all"||subTab==="emotion") && emoSorted.length>0 && (
+          {emoSorted.length>0 && (
             <div style={{background:T.card, borderRadius:16, padding:20, marginBottom:12, boxShadow:T.shadow}}>
               <div style={{fontSize:14, fontWeight:700, color:T.text, marginBottom:14}}>🎭 감정의 결</div>
-              <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:subTab==="emotion"?16:0}}>
+              <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:16}}>
                 {emoSorted.map(([k,v])=>{const e=EMOTIONS[k]; if(!e) return null; return (<div key={k} style={{padding:"10px 14px", borderRadius:12, background:e.color+"22", textAlign:"center", border:`1px solid ${e.color}44`}}><div style={{fontSize:20}}>{e.emoji}</div><div style={{fontSize:11, fontWeight:600, color:T.text, marginTop:3}}>{e.label}</div><div style={{fontSize:10, color:T.textSub}}>{v}점</div></div>);})}
               </div>
-              {subTab==="emotion" && emoSorted.map(([k,v],i)=>{const e=EMOTIONS[k]; if(!e) return null; return (<div key={k} style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}><span style={{fontSize:12, fontWeight:700, color:T.textSub, minWidth:18}}>{i+1}</span><span style={{fontSize:16}}>{e.emoji}</span><span style={{fontSize:13, fontWeight:600, color:T.text, minWidth:50}}>{e.label}</span><div style={{flex:1, height:8, borderRadius:4, background:T.border}}><div style={{height:"100%", borderRadius:4, background:e.color, width:`${(v/maxEmo)*100}%`}}/></div><span style={{fontSize:12, color:T.textSub, minWidth:28, textAlign:"right"}}>{v}점</span></div>);})}
-            </div>
-          )}
-          {(subTab==="all"||subTab==="activity") && actSorted.length>0 && (
-            <div style={{background:T.card, borderRadius:16, padding:20, boxShadow:T.shadow}}>
-              <div style={{fontSize:14, fontWeight:700, color:T.text, marginBottom:12}}>🏃 활동의 결</div>
-              <div style={{display:"flex", flexWrap:"wrap", gap:8, marginBottom:subTab==="activity"?16:0}}>
-                {actSorted.map(([a,c])=>(<div key={a} style={{padding:"9px 14px", borderRadius:14, background:T.accentBg, display:"flex", alignItems:"center", gap:6, border:`1px solid ${T.accentLight}`}}><span style={{fontSize:13, fontWeight:600, color:T.text}}>{a}</span><span style={{fontSize:12, fontWeight:700, color:T.accent, background:T.card, padding:"1px 7px", borderRadius:8}}>{c}회</span></div>))}
-              </div>
-              {subTab==="activity" && actSorted.map(([a,c],i)=>(<div key={a} style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}><span style={{fontSize:12, fontWeight:700, color:T.textSub, minWidth:18}}>{i+1}</span><span style={{fontSize:13, fontWeight:600, color:T.text, flex:1}}>{a}</span><div style={{width:100, height:8, borderRadius:4, background:T.border}}><div style={{height:"100%", borderRadius:4, background:T.accent, width:`${(c/maxAct)*100}%`}}/></div><span style={{fontSize:12, color:T.textSub, minWidth:28, textAlign:"right"}}>{c}회</span></div>))}
+              {emoSorted.map(([k,v],i)=>{const e=EMOTIONS[k]; if(!e) return null; return (<div key={k} style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}><span style={{fontSize:12, fontWeight:700, color:T.textSub, minWidth:18}}>{i+1}</span><span style={{fontSize:16}}>{e.emoji}</span><span style={{fontSize:13, fontWeight:600, color:T.text, minWidth:50}}>{e.label}</span><div style={{flex:1, height:8, borderRadius:4, background:T.border}}><div style={{height:"100%", borderRadius:4, background:e.color, width:`${(v/maxEmo)*100}%`}}/></div><span style={{fontSize:12, color:T.textSub, minWidth:28, textAlign:"right"}}>{v}점</span></div>);})}
             </div>
           )}
         </div>
@@ -2087,10 +1903,6 @@ ${diaryCtx}`;
           const haystack = [
             d.title, d.content,
             ...(d.emotions||[]).map(e=>EMOTIONS[e.key]?.label||""),
-            ...(d.activities||[]),
-            ...(d.places||[]).map(p=>p.name),
-            ...(d.people||[]),
-            ...(d.purchases||[]),
           ].join(" ").toLowerCase();
           if (!words.every(w => haystack.includes(w))) return false;
         }
@@ -2148,7 +1960,7 @@ ${diaryCtx}`;
               <div style={{display:"flex", alignItems:"center", background:T.input, borderRadius:12, border:`1.5px solid ${T.border}`, padding:"0 14px"}}>
                 <span style={{fontSize:14, color:T.textSub, marginRight:8}}>🔍</span>
                 <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
-                  placeholder="제목, 내용, 감정, 활동, 장소, 사람, 구매로 검색..."
+                  placeholder="제목, 내용, 감정으로 검색..."
                   autoFocus
                   style={{flex:1, border:"none", background:"transparent", outline:"none", fontSize:14, color:T.text, padding:"11px 0", fontFamily:"inherit"}}/>
                 {searchQuery && (
@@ -2188,11 +2000,6 @@ ${diaryCtx}`;
                             <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:8, lineHeight:1.4}}>{d.title}</div>
                             <div style={{display:"flex", flexWrap:"wrap", gap:5, marginBottom:6}}>
                               {(d.emotions||[]).map(e=>EMOTIONS[e.key]?(<span key={e.key} style={{padding:"4px 10px", borderRadius:12, background:EMOTIONS[e.key].color+"22", fontSize:12, color:T.text, fontWeight:500}}>{EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label}</span>):null)}
-                            </div>
-                            <div style={{display:"flex", flexWrap:"wrap", gap:6}}>
-                              {(d.places||[]).map((p,i)=>(<span key={`p${i}`} style={{fontSize:11, color:T.textSub}}>📍 {p.name}</span>))}
-                              {(d.people||[]).map((name,i)=>(<span key={`pe${i}`} style={{fontSize:11, color:T.textSub}}>👤 {name}</span>))}
-                              {(d.purchases||[]).map((item,i)=>(<span key={`pu${i}`} style={{fontSize:11, color:T.textSub}}>🛍️ {item}</span>))}
                             </div>
                           </div>
                           <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`}}>
