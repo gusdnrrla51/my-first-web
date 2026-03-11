@@ -1520,19 +1520,18 @@ ${diaryCtx}`;
         })();
       }, [user]);
 
-      // 방별 멤버 수 로드
+      // 나의 그룹방 멤버 수 로드
       useEffect(() => {
+        if (!mbti) return;
+        const temperament = TEMPERAMENT_MAP[mbti];
+        if (!temperament) return;
         (async () => {
-          const { data: rooms } = await sb.from('mbti_chat_rooms').select('id, mbti');
-          if (!rooms) return;
-          const counts = {};
-          for (const room of rooms) {
-            const { count } = await sb.from('mbti_chat_members').select('*', { count: 'exact', head: true }).eq('room_id', room.id);
-            counts[room.mbti] = count || 0;
-          }
-          setMemberCounts(counts);
+          const { data: room } = await sb.from('mbti_chat_rooms').select('id').eq('mbti', temperament).single();
+          if (!room) return;
+          const { count } = await sb.from('mbti_chat_members').select('*', { count: 'exact', head: true }).eq('room_id', room.id);
+          setMemberCounts({ [temperament]: count || 0 });
         })();
-      }, [myRooms]);
+      }, [myRooms, mbti]);
 
       // MBTI 분석 후 기질 그룹방에 자동 참여
       const autoJoinGroupRoom = async (mbtiResult) => {
@@ -1632,8 +1631,6 @@ ${diaryCtx}`;
 
       // MBTI 확인 상태 — 그룹방 중심 UI
       const myGroup = TEMPERAMENT_INFO[myTemperament];
-      const groupRooms = myRooms.filter(r => r.room_type === 'group');
-      const individualRooms = myRooms.filter(r => r.room_type === 'individual');
 
       return (
         <div style={{ padding: "20px 16px", paddingBottom: 20 }}>
@@ -1698,56 +1695,6 @@ ${diaryCtx}`;
             </div>
           )}
 
-          {/* 다른 기질 그룹방 */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>🌏 다른 결의 사람들</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {Object.entries(TEMPERAMENT_INFO).filter(([k]) => k !== myTemperament).map(([key, info]) => {
-                const isJoined = myRooms.some(r => r.mbti === key);
-                return (
-                  <div key={key} onClick={() => handleJoinRoom(key)}
-                    style={{ background: T.card, borderRadius: 14, padding: "14px 18px", boxShadow: T.shadow, cursor: "pointer", border: isJoined ? `1.5px solid ${info.color}` : `1px solid ${T.border}` }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 38, height: 38, borderRadius: 12, background: info.color + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{info.emoji}</div>
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{info.label} 방</div>
-                          <div style={{ fontSize: 11, color: T.textSub }}>{info.desc}</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 11, color: T.textMuted }}>{memberCounts[key] || 0}명</span>
-                        {isJoined && <span style={{ fontSize: 10, background: T.success, color: "#fff", padding: "2px 8px", borderRadius: 8, fontWeight: 700 }}>참여중</span>}
-                        <span style={{ fontSize: 13, color: T.textSub }}>→</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 개별 MBTI 방 (보조) */}
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 4 }}>🔍 개별 유형 방</div>
-            <div style={{ fontSize: 12, color: T.textSub, marginBottom: 10 }}>정확히 같은 MBTI끼리 더 깊게 소통하고 싶다면</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
-              {Object.keys(MBTI_DESCRIPTIONS).map(type => {
-                const isMine = type === mbti;
-                const isJoined = myRooms.some(r => r.mbti === type);
-                const tempInfo = TEMPERAMENT_INFO[TEMPERAMENT_MAP[type]];
-                return (
-                  <div key={type} onClick={() => handleJoinRoom(type)}
-                    style={{ background: isMine ? tempInfo.color + "18" : T.card, borderRadius: 10, padding: "10px 6px", textAlign: "center", cursor: "pointer", border: isMine ? `2px solid ${tempInfo.color}` : `1px solid ${T.border}` }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: isMine ? tempInfo.color : T.text }}>{type}</div>
-                    <div style={{ fontSize: 9, color: T.textSub, marginTop: 2 }}>{MBTI_DESCRIPTIONS[type]}</div>
-                    <div style={{ fontSize: 9, color: T.textMuted, marginTop: 2 }}>{memberCounts[type] || 0}명</div>
-                    {isMine && <div style={{ width: 6, height: 6, borderRadius: "50%", background: tempInfo.color, margin: "4px auto 0" }} />}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </div>
       );
     }
@@ -1967,7 +1914,7 @@ ${diaryCtx}`;
       );
     }
 
-    function StatsTab({diaries}) {
+    function StatsTab({diaries, onOpenAI}) {
       const [subTab, setSubTab] = useState("all");
       const allEmo = {}; diaries.forEach(d=>(d.emotions||[]).forEach(e=>{allEmo[e.key]=(allEmo[e.key]||0)+e.intensity;}));
       const emoSorted = Object.entries(allEmo).sort((a,b)=>b[1]-a[1]); const maxEmo = emoSorted[0]?.[1]||1;
@@ -1978,6 +1925,7 @@ ${diaryCtx}`;
         <div style={{padding:"20px 16px", paddingBottom:20}}>
           <div style={{fontSize:20, fontWeight:800, color:T.text, marginBottom:4}}>나의 결</div>
           <div style={{fontSize:13, color:T.textSub, marginBottom:14}}>기록이 쌓일수록 결이 선명해집니다</div>
+          <button onClick={onOpenAI} style={{width:"100%", padding:"14px 18px", borderRadius:14, border:"none", background:T.gradient, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:16, minHeight:48, display:"flex", alignItems:"center", justifyContent:"center", gap:8, boxShadow:`0 4px 16px ${T.accent}44`}}>☕ AI에게 나의 결 물어보기</button>
           <div style={{display:"flex", gap:8, marginBottom:16, overflowX:"auto", paddingBottom:4}}>
             {[["all","전체"],["emotion","감정"],["activity","활동"]].map(([id,label])=>(
               <button key={id} onClick={()=>setSubTab(id)} style={{padding:"9px 18px", borderRadius:20, border:`1.5px solid ${subTab===id?T.accent:T.border}`, background:subTab===id?T.accentBg:T.card, color:subTab===id?T.accent:T.textSub, fontSize:13, fontWeight:subTab===id?700:500, cursor:"pointer", whiteSpace:"nowrap", minHeight:40, flexShrink:0}}>{label}</button>
@@ -2039,10 +1987,22 @@ ${diaryCtx}`;
             </button>
           </div>
 
+          <div style={{background:T.card, borderRadius:16, padding:"16px 20px", marginBottom:12, boxShadow:T.shadow}}>
+            <button onClick={()=>{window.location.href="mailto:diary.gyeol@gmail.com?subject=[GYEOL 문의]&body=안녕하세요, GYEOL 앱 관련 문의드립니다.%0A%0A문의 내용:%0A";}} style={{width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", border:"none", background:"none", cursor:"pointer"}}>
+              <div style={{display:"flex", alignItems:"center", gap:10}}>
+                <span style={{fontSize:18}}>📩</span>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontSize:14, color:T.text, fontWeight:600}}>문의하기</div>
+                  <div style={{fontSize:11, color:T.textSub}}>diary.gyeol@gmail.com</div>
+                </div>
+              </div>
+              <span style={{fontSize:13, color:T.textSub}}>→</span>
+            </button>
+          </div>
+
           <button onClick={handleLogout} disabled={loggingOut} style={{width:"100%", padding:15, borderRadius:12, border:`1px solid ${T.danger}`, background:"transparent", color:T.danger, fontSize:15, fontWeight:600, cursor:"pointer", minHeight:52, opacity:loggingOut?0.7:1}}>{loggingOut?"로그아웃 중...":"로그아웃"}</button>
 
           <div style={{textAlign:"center", marginTop:20, fontSize:11, color:T.textSub, lineHeight:1.8}}>
-            <div>문의: diary.gyeol@gmail.com</div>
             <div>© 2026 GYEOL. All rights reserved.</div>
           </div>
         </div>
@@ -2061,8 +2021,6 @@ ${diaryCtx}`;
       const [selected, setSelected] = useState(null);
       const [writing, setWriting] = useState(false);
       const [showAI, setShowAI] = useState(false);
-      const [showFilter, setShowFilter] = useState(false);
-      const [sd, setSd] = useState(""); const [ed, setEd] = useState("");
       const [savedToast, setSavedToast] = useState(false);
       const [showEditConfirm, setShowEditConfirm] = useState(false);
       const [aiDiary, setAiDiary] = useState(null);
@@ -2123,7 +2081,6 @@ ${diaryCtx}`;
         return s;
       })();
       const filtered = diaries.filter(d=>{
-        if(sd&&d.date<sd) return false; if(ed&&d.date>ed) return false;
         if(searchQuery.trim()) {
           const q = searchQuery.trim().toLowerCase();
           const words = q.split(/\s+/);
@@ -2176,14 +2133,12 @@ ${diaryCtx}`;
         <div style={{position:"fixed", inset:0, display:"flex", flexDirection:"column", background:T.bg, fontFamily:"'Noto Sans KR',sans-serif"}}>
           <div style={{ background:T.card, borderBottom:`1px solid ${T.border}`, padding:"0 20px", paddingTop:`calc(env(safe-area-inset-top,0px) + 10px)`, paddingBottom:10, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
             <span style={{fontSize:17, fontWeight:800, color:T.accent, letterSpacing:3}}>GYEOL</span>
-            <div style={{display:"flex", gap:8, alignItems:"center"}}>
-              {mainTab==="diary" && (<>
-                <button onClick={()=>setShowSearch(s=>!s)} style={{background:showSearch?T.accentBg:T.bg, border:`1px solid ${showSearch?T.accent:T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, color:showSearch?T.accent:T.text, cursor:"pointer", minHeight:36}}>🔍 검색</button>
-                <button onClick={()=>setShowFilter(true)} style={{background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, color:T.text, cursor:"pointer", minHeight:36}}>📅 필터</button>
-                <button onClick={()=>setShowAI(true)} style={{background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, color:T.text, cursor:"pointer", minHeight:36}}>✨ 결 분석</button>
-              </>)}
-              {ticketCount>0 && (<div style={{background:"linear-gradient(135deg,#FFD700,#FFA500)", borderRadius:10, padding:"6px 10px", fontSize:12, color:"#4A3728", fontWeight:700}}>🎟️ {ticketCount}</div>)}
-              {streak>0 && (<div style={{background:T.accent, borderRadius:10, padding:"6px 10px", fontSize:12, color:"#fff", fontWeight:700}}>🔥 {streak}일</div>)}
+            <div style={{display:"flex", gap:6, alignItems:"center", flexShrink:0}}>
+              {mainTab==="diary" && (
+                <button onClick={()=>setShowSearch(s=>!s)} style={{background:showSearch?T.accentBg:T.bg, border:`1px solid ${showSearch?T.accent:T.border}`, borderRadius:10, padding:"6px 10px", fontSize:13, color:showSearch?T.accent:T.text, cursor:"pointer", minHeight:32}}>🔍</button>
+              )}
+              {streak>0 && (<div style={{background:T.accent, borderRadius:10, padding:"5px 9px", fontSize:11, color:"#fff", fontWeight:700, whiteSpace:"nowrap"}}>🔥 {streak}일</div>)}
+              {ticketCount>0 && (<div style={{background:"linear-gradient(135deg,#FFD700,#FFA500)", borderRadius:10, padding:"5px 9px", fontSize:11, color:"#4A3728", fontWeight:700, whiteSpace:"nowrap"}}>🎟️ {ticketCount}</div>)}
             </div>
           </div>
 
@@ -2254,7 +2209,7 @@ ${diaryCtx}`;
               </div>
             )}
             {mainTab==="raffle" && <RaffleTab ticketCount={ticketCount} onTicketChange={setTicketCount} />}
-            {mainTab==="stats" && <StatsTab diaries={diaries}/>}
+            {mainTab==="stats" && <StatsTab diaries={diaries} onOpenAI={()=>setShowAI(true)}/>}
             {mainTab==="mypage" && <MyPage diaries={diaries} streak={streak}/>}
             {mainTab==="community" && <CommunityTab diaries={diaries} />}
           </div>
@@ -2268,21 +2223,6 @@ ${diaryCtx}`;
               </button>
             ))}
           </div>
-
-          {showFilter && (
-            <div style={{position:"fixed", inset:0, background:"rgba(74,55,40,0.5)", zIndex:200, display:"flex", flexDirection:"column", justifyContent:"flex-end"}} onClick={()=>setShowFilter(false)}>
-              <div onClick={e=>e.stopPropagation()} style={{background:T.card, borderRadius:"20px 20px 0 0", padding:"24px 20px", paddingBottom:`calc(env(safe-area-inset-bottom,0px) + 24px)`}}>
-                <div style={{width:36, height:4, borderRadius:2, background:T.border, margin:"0 auto 20px"}}/>
-                <div style={{fontSize:16, fontWeight:700, color:T.text, marginBottom:16}}>📅 날짜 필터</div>
-                <div style={{marginBottom:12}}><div style={{fontSize:12, color:T.textSub, fontWeight:600, marginBottom:6}}>시작 날짜</div><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{width:"100%", padding:"12px 14px", borderRadius:12, border:`1px solid ${T.border}`, fontSize:16, background:T.bg, color:T.text, boxSizing:"border-box", WebkitAppearance:"none"}}/></div>
-                <div style={{marginBottom:20}}><div style={{fontSize:12, color:T.textSub, fontWeight:600, marginBottom:6}}>끝 날짜</div><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{width:"100%", padding:"12px 14px", borderRadius:12, border:`1px solid ${T.border}`, fontSize:16, background:T.bg, color:T.text, boxSizing:"border-box", WebkitAppearance:"none"}}/></div>
-                <div style={{display:"flex", gap:10}}>
-                  <button onClick={()=>{setSd("");setEd("");setShowFilter(false);}} style={{flex:1, padding:15, borderRadius:12, border:`1px solid ${T.border}`, background:T.card, fontSize:15, fontWeight:600, color:T.textSub, cursor:"pointer", minHeight:50}}>초기화</button>
-                  <button onClick={()=>setShowFilter(false)} style={{flex:1, padding:15, borderRadius:12, border:"none", background:T.accent, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer", minHeight:50}}>적용</button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {showAI && <AIChatModal onClose={()=>setShowAI(false)} diaries={diaries}/>}
           {aiDiary && <DiaryAIModal diary={aiDiary} onClose={()=>setAiDiary(null)} onAnalysisSaved={handleAnalysisSaved}/>}
