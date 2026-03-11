@@ -1310,18 +1310,23 @@ ${diaryCtx}`;
         })();
       }, [user, activeWeek]);
 
-      // 추첨 트리거 (토 20시~21시)
+      // 추첨 트리거 (토 20시~21시) — 발급된 번호 중에서 무조건 당첨
       useEffect(() => {
         if (status !== 'drawing' || !user) return;
         (async () => {
           const { data: round } = await sb.from('raffle_rounds').select('*').eq('week_key', currentWeek).single();
           if (round?.status === 'drawn') { setCurrentRound(round); return; }
-          const winNum = Math.floor(Math.random() * 10000) + 1;
-          const { data: winEntry } = await sb.from('raffle_entries').select('user_id').eq('week_key', currentWeek).eq('number', winNum).limit(1).single();
+          // 이번 주 모든 응모 번호 조회
+          const { data: allEntries } = await sb.from('raffle_entries').select('number, user_id').eq('week_key', currentWeek);
+          if (!allEntries || allEntries.length === 0) return; // 응모자 없으면 추첨 안 함
+          // 발급된 번호 중 랜덤 선택 → 무조건 당첨자 발생
+          const winner = allEntries[Math.floor(Math.random() * allEntries.length)];
+          const winNum = winner.number;
+          const winnerId = winner.user_id;
           if (round) {
-            await sb.from('raffle_rounds').update({ winning_number: winNum, winner_user_id: winEntry?.user_id || null, status: 'drawn' }).eq('week_key', currentWeek);
+            await sb.from('raffle_rounds').update({ winning_number: winNum, winner_user_id: winnerId, status: 'drawn' }).eq('week_key', currentWeek);
           } else {
-            await sb.from('raffle_rounds').insert({ week_key: currentWeek, winning_number: winNum, winner_user_id: winEntry?.user_id || null, status: 'drawn' });
+            await sb.from('raffle_rounds').insert({ week_key: currentWeek, winning_number: winNum, winner_user_id: winnerId, status: 'drawn' });
           }
           const { data: updated } = await sb.from('raffle_rounds').select('*').eq('week_key', currentWeek).single();
           setCurrentRound(updated);
