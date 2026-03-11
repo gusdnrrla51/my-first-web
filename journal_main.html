@@ -138,7 +138,7 @@
     })));
     const EMO_KEYS = Object.keys(EMOTIONS);
     const ACTIVITIES = ["🏃 운동","📚 독서","🎵 음악","🍳 요리","🎮 게임","☕ 카페","🎬 영화","💻 코딩","🧘 명상","📸 사진","🛒 쇼핑","👥 모임","🚶 산책","🏠 집"];
-    const INTENSITY = ["약함","보통","강함","매우 강함"];
+    const INTENSITY = ["매우 약함","약함","보통","강함","매우 강함"];
 
     const today = () => new Date().toISOString().slice(0,10);
     const fmt = d => {
@@ -527,19 +527,20 @@
     // ========================================================
     // 🎭 EmotionSelector — 긍정/부정 탭 + 감정 칩 + 컴팩트 강도
     // ========================================================
-    function EmotionSelector({selEmotions, setSelEmotions, maxEmotions=5}) {
+    function EmotionSelector({selEmotions, setSelEmotions}) {
       const [activeTab, setActiveTab] = useState(0);
-      const toggleEmo = k => {
+      const selectEmo = k => {
         const ex = selEmotions.find(e=>e.key===k);
-        if (ex) setSelEmotions(selEmotions.filter(e=>e.key!==k));
-        else if (selEmotions.length < maxEmotions) setSelEmotions([...selEmotions, {key:k, intensity:2}]);
+        if (ex) setSelEmotions([]);
+        else setSelEmotions([{key:k, intensity:3}]);
       };
       const setIntensity = (k,v) => setSelEmotions(selEmotions.map(e=>e.key===k?{...e,intensity:v}:e));
       const currentGroups = EMOTION_CATEGORIES[activeTab].groups;
+      const selected = selEmotions[0] || null;
       return (
         <div style={{background:T.card, borderRadius:16, padding:"18px 20px", marginBottom:14, boxShadow:T.shadow}}>
           <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:4}}>오늘 어떤 감정을 느꼈나요?</div>
-          <div style={{fontSize:12, color:T.textSub, marginBottom:14}}>감정을 선택하면 일기를 작성할 수 있어요 (최대 {maxEmotions}개)</div>
+          <div style={{fontSize:12, color:T.textSub, marginBottom:14}}>하나의 감정을 선택해주세요</div>
 
           {/* 긍정/부정 세그먼트 탭 */}
           <div style={{display:"flex", borderRadius:12, background:T.bg, padding:3, marginBottom:16, border:`1px solid ${T.border}`}}>
@@ -550,7 +551,7 @@
             ))}
           </div>
 
-          {/* 그룹별 감정 칩 — 바로 노출 */}
+          {/* 그룹별 감정 칩 */}
           <div style={{display:"flex", flexDirection:"column", gap:14}}>
             {currentGroups.map((g,gi)=>(
               <div key={gi}>
@@ -560,11 +561,10 @@
                 </div>
                 <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
                   {g.emotions.map(emo=>{
-                    const sel = selEmotions.find(x=>x.key===emo.key);
-                    const disabled = !sel && selEmotions.length >= maxEmotions;
+                    const sel = selected && selected.key===emo.key;
                     return (
-                      <button key={emo.key} onClick={()=>!disabled&&toggleEmo(emo.key)}
-                        style={{padding:"7px 14px", borderRadius:20, border:`1.5px solid ${sel?g.color:T.border}`, background:sel?g.color+"22":"#fff", fontSize:13, cursor:disabled?"default":"pointer", color:sel?T.text:T.textSub, fontWeight:sel?600:400, opacity:disabled?0.4:1, transition:"all 0.15s", transform:sel?"scale(1.03)":"scale(1)"}}>
+                      <button key={emo.key} onClick={()=>selectEmo(emo.key)}
+                        style={{padding:"7px 14px", borderRadius:20, border:`1.5px solid ${sel?g.color:T.border}`, background:sel?g.color+"22":"#fff", fontSize:13, cursor:"pointer", color:sel?T.text:T.textSub, fontWeight:sel?600:400, transition:"all 0.15s", transform:sel?"scale(1.05)":"scale(1)"}}>
                         {emo.emoji} {emo.label}
                       </button>
                     );
@@ -574,26 +574,21 @@
             ))}
           </div>
 
-          {/* 선택된 감정 요약 + 컴팩트 강도 선택 */}
-          {selEmotions.length>0 && (
+          {/* 선택된 감정 + 강도 선택 */}
+          {selected && EMOTIONS[selected.key] && (
             <div style={{marginTop:16, padding:"14px 16px", background:T.accentBg, borderRadius:14, animation:"fadeIn 0.2s ease"}}>
-              <div style={{fontSize:12, fontWeight:700, color:T.accent, marginBottom:10}}>선택한 감정 {selEmotions.length}/{maxEmotions}</div>
-              <div style={{display:"flex", flexDirection:"column", gap:10}}>
-                {selEmotions.map(e=>(
-                  <div key={e.key} style={{display:"flex", alignItems:"center", gap:8, background:"#fff", borderRadius:12, padding:"8px 12px", border:`1px solid ${EMOTIONS[e.key].color}33`}}>
-                    <button onClick={()=>toggleEmo(e.key)} style={{background:"none", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, color:T.text, display:"flex", alignItems:"center", gap:4, padding:0, flexShrink:0}}>
-                      {EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label} <span style={{fontSize:10, opacity:0.5, marginLeft:2}}>✕</span>
-                    </button>
-                    <div style={{display:"flex", gap:4, marginLeft:"auto", alignItems:"center"}}>
-                      {INTENSITY.map((label,i)=>(
-                        <button key={i} onClick={()=>setIntensity(e.key,i+1)} title={label}
-                          style={{width:e.intensity===i+1?26:18, height:e.intensity===i+1?26:18, borderRadius:"50%", border:`2px solid ${e.intensity===i+1?EMOTIONS[e.key].color:T.border}`, background:e.intensity===i+1?EMOTIONS[e.key].color:"transparent", cursor:"pointer", padding:0, transition:"all 0.15s", display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700, color:e.intensity===i+1?"#fff":T.textSub}}>
-                          {e.intensity===i+1?(i+1):""}
-                        </button>
-                      ))}
-                      <span style={{fontSize:10, color:T.textSub, marginLeft:4, minWidth:32}}>{INTENSITY[(e.intensity||2)-1]}</span>
-                    </div>
-                  </div>
+              <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:12}}>
+                <span style={{fontSize:22}}>{EMOTIONS[selected.key].emoji}</span>
+                <span style={{fontSize:15, fontWeight:700, color:T.text}}>{EMOTIONS[selected.key].label}</span>
+                <button onClick={()=>setSelEmotions([])} style={{marginLeft:"auto", background:"none", border:"none", fontSize:12, color:T.textSub, cursor:"pointer", padding:4}}>✕ 해제</button>
+              </div>
+              <div style={{fontSize:12, fontWeight:600, color:T.textSub, marginBottom:8}}>감정의 강도</div>
+              <div style={{display:"flex", gap:6, alignItems:"center"}}>
+                {INTENSITY.map((label,i)=>(
+                  <button key={i} onClick={()=>setIntensity(selected.key,i+1)} title={label}
+                    style={{flex:1, padding:"10px 4px", borderRadius:10, border:`1.5px solid ${selected.intensity===i+1?EMOTIONS[selected.key].color:T.border}`, background:selected.intensity===i+1?EMOTIONS[selected.key].color+"33":"#fff", fontSize:11, color:selected.intensity===i+1?T.text:T.textSub, cursor:"pointer", fontWeight:selected.intensity===i+1?700:400, textAlign:"center", transition:"all 0.15s"}}>
+                    {label}
+                  </button>
                 ))}
               </div>
             </div>
@@ -734,6 +729,164 @@
               )}
             </div>
           </div>
+      );
+    }
+
+    // ========================================================
+    // 📅 MonthNavigator — 월 이동 + 뷰모드 탭
+    // ========================================================
+    function MonthNavigator({viewMonth, setViewMonth, calView, setCalView}) {
+      const [y, m] = viewMonth.split("-").map(Number);
+      const prev = () => { const d=new Date(y,m-2,1); setViewMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`); };
+      const next = () => {
+        const now = new Date(); const cur = new Date(y,m,1);
+        if (cur > now) return;
+        const d=new Date(y,m,1); setViewMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
+      };
+      const isNextDisabled = () => { const now=new Date(); return y===now.getFullYear() && m===now.getMonth()+1; };
+      return (
+        <div style={{marginBottom:14}}>
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12}}>
+            <button onClick={prev} style={{background:"none", border:"none", fontSize:18, cursor:"pointer", color:T.text, padding:"4px 8px"}}>◀</button>
+            <span style={{fontSize:16, fontWeight:700, color:T.text}}>{y}년 {m}월</span>
+            <button onClick={next} disabled={isNextDisabled()} style={{background:"none", border:"none", fontSize:18, cursor:"pointer", color:isNextDisabled()?T.border:T.text, padding:"4px 8px"}}>▶</button>
+          </div>
+          <div style={{display:"flex", borderRadius:12, background:T.bg, padding:3, border:`1px solid ${T.border}`}}>
+            {["월","일"].map(v=>(
+              <button key={v} onClick={()=>setCalView(v)} style={{flex:1, padding:"9px 0", borderRadius:10, border:"none", fontSize:13, fontWeight:calView===v?700:500, cursor:"pointer", background:calView===v?T.card:"transparent", color:calView===v?T.text:T.textSub, boxShadow:calView===v?"0 1px 4px rgba(0,0,0,0.08)":"none", transition:"all 0.2s"}}>
+                {v==="월"?"📆 월간":"📋 일간"}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================================
+    // 📋 DailyCalendarView — 날짜별 타임라인 리스트
+    // ========================================================
+    function DailyCalendarView({diaries, viewMonth, onSelect, onAI}) {
+      const [y, m] = viewMonth.split("-").map(Number);
+      const todayStr = today();
+      const todayDate = new Date(todayStr+"T00:00:00");
+      const daysInMonth = new Date(y, m, 0).getDate();
+      const isCurrentMonth = y===todayDate.getFullYear() && m===todayDate.getMonth()+1;
+      const lastDay = isCurrentMonth ? todayDate.getDate() : daysInMonth;
+      const diaryMap = {};
+      diaries.forEach(d => { if(d.date.startsWith(viewMonth)) diaryMap[parseInt(d.date.split("-")[2])]=d; });
+      const weekdays = ["일","월","화","수","목","금","토"];
+      const days = [];
+      for (let i=lastDay; i>=1; i--) days.push(i);
+
+      return (
+        <div style={{position:"relative", paddingLeft:70}}>
+          {/* 점선 타임라인 */}
+          <div style={{position:"absolute", left:48, top:0, bottom:0, width:0, borderLeft:"2px dashed "+T.border}}/>
+          {days.map(day=>{
+            const dateStr = `${viewMonth}-${String(day).padStart(2,"0")}`;
+            const d = diaryMap[day];
+            const dow = new Date(y,m-1,day).getDay();
+            const isTod = dateStr===todayStr;
+            const emo = d && d.emotions && d.emotions[0] && EMOTIONS[d.emotions[0].key];
+            return (
+              <div key={day} style={{display:"flex", marginBottom:16, minHeight:60, position:"relative"}}>
+                {/* 왼쪽 날짜 */}
+                <div style={{position:"absolute", left:-70, width:56, textAlign:"center", flexShrink:0}}>
+                  <div style={{fontSize:24, fontWeight:700, color:isTod?T.accent:T.text, lineHeight:1.1}}>{String(day).padStart(2,"0")}</div>
+                  <div style={{fontSize:11, color:isTod?T.accent:T.textSub, fontWeight:500}}>{weekdays[dow]}요일</div>
+                  {d && <div style={{fontSize:10, color:T.textSub, marginTop:2}}>{d.created_at?new Date(d.created_at).toLocaleTimeString("ko",{hour:"2-digit",minute:"2-digit"}):""}</div>}
+                </div>
+                {/* 점선 위 동그라미 */}
+                <div style={{position:"absolute", left:-26, top:8, width:10, height:10, borderRadius:"50%", background:d?T.accent:T.border, border:`2px solid ${T.card}`, zIndex:1}}/>
+                {/* 오른쪽 일기 카드 */}
+                <div style={{flex:1, marginLeft:8}}>
+                  {d ? (
+                    <div onClick={()=>onSelect(d)} style={{background:T.card, borderRadius:14, padding:"14px 16px", boxShadow:T.shadow, border:`1px solid ${T.border}`, cursor:"pointer"}}>
+                      {d.is_public===false && <span style={{display:"inline-block", background:T.accent, color:"#fff", fontSize:10, fontWeight:700, borderRadius:6, padding:"2px 8px", marginBottom:6}}>비공개</span>}
+                      <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:6, lineHeight:1.4}}>{d.title}</div>
+                      {emo && <div style={{display:"flex", alignItems:"center", gap:4, marginBottom:8}}><span style={{fontSize:16}}>{emo.emoji}</span><span style={{fontSize:12, color:T.textSub}}>{emo.label}</span></div>}
+                      <div style={{display:"flex", alignItems:"center", gap:12, fontSize:12, color:T.textSub}}>
+                        {d.photo_url && <span>📷</span>}
+                        <span>💬 {d.comment_count||0}</span>
+                        <span>❤️ {d.like_count||0}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{padding:"16px 0", color:T.textSub, fontSize:13}}>작성된 일기가 없습니다.</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ========================================================
+    // 📆 MonthlyCalendarView — 달력 그리드 + 통계
+    // ========================================================
+    function MonthlyCalendarView({diaries, viewMonth, onSelect}) {
+      const [y, m] = viewMonth.split("-").map(Number);
+      const todayStr = today();
+      const firstDow = new Date(y, m-1, 1).getDay();
+      const daysInMonth = new Date(y, m, 0).getDate();
+      const diaryDays = new Set();
+      const diaryMap = {};
+      diaries.forEach(d => { if(d.date.startsWith(viewMonth)) { diaryDays.add(parseInt(d.date.split("-")[2])); diaryMap[parseInt(d.date.split("-")[2])]=d; }});
+      const todayDate = new Date(todayStr+"T00:00:00");
+      const isCurrentMonth = y===todayDate.getFullYear() && m===todayDate.getMonth()+1;
+      const passedDays = isCurrentMonth ? todayDate.getDate() : daysInMonth;
+      const writtenCount = diaryDays.size;
+      const pct = passedDays>0 ? Math.round(writtenCount/passedDays*100) : 0;
+
+      const cells = [];
+      for (let i=0; i<firstDow; i++) cells.push(null);
+      for (let d=1; d<=daysInMonth; d++) cells.push(d);
+      while (cells.length%7!==0) cells.push(null);
+
+      const weekdays = ["일","월","화","수","목","금","토"];
+
+      return (
+        <div>
+          {/* 달력 그리드 */}
+          <div style={{background:T.card, borderRadius:16, padding:"16px 12px", boxShadow:T.shadow, marginBottom:14}}>
+            <div style={{display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:2, marginBottom:8}}>
+              {weekdays.map(w=>(
+                <div key={w} style={{textAlign:"center", fontSize:11, fontWeight:600, color:w==="일"?"#C97064":w==="토"?"#6B8EC4":T.textSub, padding:"4px 0"}}>{w}</div>
+              ))}
+            </div>
+            <div style={{display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:2}}>
+              {cells.map((day,i)=>{
+                if (!day) return <div key={i}/>;
+                const dateStr = `${viewMonth}-${String(day).padStart(2,"0")}`;
+                const hasEntry = diaryDays.has(day);
+                const isTod = dateStr===todayStr;
+                const isFuture = new Date(y,m-1,day) > todayDate;
+                return (
+                  <div key={i} onClick={()=>{ if(hasEntry && diaryMap[day]) onSelect(diaryMap[day]); }}
+                    style={{textAlign:"center", padding:"8px 0", cursor:hasEntry?"pointer":"default", position:"relative", borderRadius:10, background:isTod?T.accentBg:"transparent"}}>
+                    <div style={{fontSize:13, fontWeight:isTod?700:400, color:isFuture?T.border:isTod?T.accent:T.text}}>{day}</div>
+                    {hasEntry && <div style={{width:8, height:8, borderRadius:"50%", background:"#E74C3C", margin:"2px auto 0"}}/>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 통계 */}
+          <div style={{background:T.card, borderRadius:16, padding:"16px 20px", boxShadow:T.shadow}}>
+            <div style={{fontSize:14, fontWeight:700, color:T.text, marginBottom:10}}>📊 이번 달 기록</div>
+            <div style={{display:"flex", alignItems:"center", gap:12, marginBottom:8}}>
+              <div style={{flex:1, height:8, borderRadius:4, background:T.bg, overflow:"hidden"}}>
+                <div style={{width:`${pct}%`, height:"100%", borderRadius:4, background:T.gradient, transition:"width 0.5s ease"}}/>
+              </div>
+              <span style={{fontSize:13, fontWeight:700, color:T.accent, minWidth:40, textAlign:"right"}}>{pct}%</span>
+            </div>
+            <div style={{fontSize:12, color:T.textSub}}>
+              {passedDays}일 중 <span style={{fontWeight:700, color:T.text}}>{writtenCount}일</span> 기록했어요
+            </div>
+          </div>
+        </div>
       );
     }
 
@@ -1862,6 +2015,8 @@ ${diaryCtx}`;
       const [showFloatingBtn, setShowFloatingBtn] = useState(false);
       const [searchQuery, setSearchQuery] = useState("");
       const [showSearch, setShowSearch] = useState(false);
+      const [viewMonth, setViewMonth] = useState(() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; });
+      const [calView, setCalView] = useState("일");
       const recordBtnRef = useRef(null);
       const scrollRef = useRef(null);
 
@@ -1994,8 +2149,7 @@ ${diaryCtx}`;
             {mainTab==="diary" && (
               <div style={{padding:"16px 16px 12px"}}>
                 {dbLoading ? (<div style={{textAlign:"center", padding:40, color:T.textSub}}><div style={{fontSize:14}}>일기를 불러오는 중...</div></div>) : (<>
-                  <WeeklyAISummary diaries={diaries}/>
-                  {streak>0 && (<div style={{background:T.gradient, borderRadius:14, padding:"14px 18px", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"space-between", color:"#fff"}}><div><div style={{fontSize:14, fontWeight:700}}>🔥 {streak}일째 나를 들여다보는 중</div><div style={{fontSize:11, opacity:0.85, marginTop:1}}>매일 쌓이는 기록이 결을 만들어요</div></div><div style={{fontSize:28, fontWeight:800}}>{streak}</div></div>)}
+                  {/* 기록 버튼 + 드래프트 */}
                   {hasDraft && (
                     <div onClick={()=>setWriting(true)} style={{background:`linear-gradient(135deg, ${T.card}, ${T.accentBg})`, borderRadius:14, padding:"16px 18px", marginBottom:10, border:`1.5px dashed ${T.accent}`, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", boxShadow:T.shadow, animation:"fadeIn 0.3s ease"}}>
                       <div><div style={{fontSize:14, fontWeight:700, color:T.accent, marginBottom:3}}>📝 작성중인 일기가 있어요</div><div style={{fontSize:12, color:T.textSub}}>탭하여 이어서 작성하기</div></div>
@@ -2006,31 +2160,16 @@ ${diaryCtx}`;
                     style={{width:"100%", padding:16, borderRadius:14, border:"none", background:(hasDraft||!todayWritten)?T.gradient:T.border, color:(hasDraft||!todayWritten)?"#fff":T.textSub, fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:16, minHeight:52, boxShadow:(hasDraft||!todayWritten)?`0 4px 16px ${T.accent}44`:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6}}>
                     <span style={{fontSize:18}}>✏️</span>{hasDraft?"작성중인 일기 이어쓰기":todayWritten?"오늘 일기 수정하기":"오늘 하루 기록하기"}
                   </button>
-                  <div style={{display:"flex", flexDirection:"column", gap:10}}>
-                    {filtered.length===0 && (<div style={{textAlign:"center", padding:40, color:T.textSub}}><div style={{fontSize:40, marginBottom:10}}>{searchQuery?"🔍":"✏️"}</div><div style={{fontSize:14, lineHeight:1.7}}>{searchQuery?`"${searchQuery}" 검색 결과가 없어요.`:"아직 기록이 없어요.\n오늘의 하루를 솔직하게 적어보세요."}</div></div>)}
-                    {filtered.map(d=>{
-                      return (
-                        <div key={d.id} style={{background:T.card, borderRadius:16, padding:"16px 18px", boxShadow:T.shadow, border:"1px solid transparent"}}>
-                          <div onClick={()=>setSelected(d)} style={{cursor:"pointer"}}>
-                            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6}}>
-                              <div style={{display:"flex", alignItems:"center", gap:6}}><span style={{fontSize:12, color:T.textSub}}>{fmt(d.date)}</span>{isToday(d.date)&&<span style={{background:T.accent, color:"#fff", padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700}}>TODAY</span>}</div>
-                              {d.photo_url&&<span style={{fontSize:16, flexShrink:0}}>📷</span>}
-                            </div>
-                            <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:8, lineHeight:1.4}}>{d.title}</div>
-                            <div style={{display:"flex", flexWrap:"wrap", gap:5, marginBottom:6}}>
-                              {(d.emotions||[]).map(e=>EMOTIONS[e.key]?(<span key={e.key} style={{padding:"4px 10px", borderRadius:12, background:EMOTIONS[e.key].color+"22", fontSize:12, color:T.text, fontWeight:500}}>{EMOTIONS[e.key].emoji} {EMOTIONS[e.key].label}</span>):null)}
-                            </div>
-                          </div>
-                          <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`}}>
-                            <button onClick={e=>{e.stopPropagation(); setAiDiary(d);}}
-                              style={{width:"100%", padding:"8px 0", border:`1px solid ${T.accentLight}`, borderRadius:10, background:T.accentBg, color:T.accent, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5, minHeight:36}}>
-                              🤖 AI 분석 보기
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+
+                  {/* 월 네비게이션 + 뷰모드 탭 */}
+                  <MonthNavigator viewMonth={viewMonth} setViewMonth={setViewMonth} calView={calView} setCalView={setCalView}/>
+
+                  {/* 뷰 전환 */}
+                  {calView==="일" ? (
+                    <DailyCalendarView diaries={searchQuery?filtered:diaries} viewMonth={viewMonth} onSelect={setSelected} onAI={setAiDiary}/>
+                  ) : (
+                    <MonthlyCalendarView diaries={diaries} viewMonth={viewMonth} onSelect={setSelected}/>
+                  )}
                 </>)}
               </div>
             )}
