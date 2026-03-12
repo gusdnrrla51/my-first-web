@@ -801,14 +801,22 @@
                 {/* 오른쪽 일기 카드 */}
                 <div style={{flex:1, marginLeft:8}}>
                   {d ? (
-                    <div onClick={()=>onSelect(d)} style={{background:T.card, borderRadius:14, padding:"14px 16px", boxShadow:T.shadow, border:`1px solid ${T.border}`, cursor:"pointer"}}>
-                      {d.is_public===false && <span style={{display:"inline-block", background:T.accent, color:"#fff", fontSize:10, fontWeight:700, borderRadius:6, padding:"2px 8px", marginBottom:6}}>비공개</span>}
-                      <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:6, lineHeight:1.4}}>{d.title}</div>
-                      {emo && <div style={{display:"flex", alignItems:"center", gap:4, marginBottom:8}}><span style={{fontSize:16}}>{emo.emoji}</span><span style={{fontSize:12, color:T.textSub}}>{emo.label}</span></div>}
-                      <div style={{display:"flex", alignItems:"center", gap:12, fontSize:12, color:T.textSub}}>
-                        {d.photo_url && <span>📷</span>}
-                        <span>💬 {d.comment_count||0}</span>
-                        <span>❤️ {d.like_count||0}</span>
+                    <div style={{background:T.card, borderRadius:14, padding:"14px 16px", boxShadow:T.shadow, border:`1px solid ${T.border}`}}>
+                      <div onClick={()=>onSelect(d)} style={{cursor:"pointer"}}>
+                        {d.is_public===false && <span style={{display:"inline-block", background:T.accent, color:"#fff", fontSize:10, fontWeight:700, borderRadius:6, padding:"2px 8px", marginBottom:6}}>비공개</span>}
+                        <div style={{fontSize:15, fontWeight:700, color:T.text, marginBottom:6, lineHeight:1.4}}>{d.title}</div>
+                        {emo && <div style={{display:"flex", alignItems:"center", gap:4, marginBottom:8}}><span style={{fontSize:16}}>{emo.emoji}</span><span style={{fontSize:12, color:T.textSub}}>{emo.label}</span></div>}
+                        <div style={{display:"flex", alignItems:"center", gap:12, fontSize:12, color:T.textSub}}>
+                          {d.photo_url && <span>📷</span>}
+                          <span>💬 {d.comment_count||0}</span>
+                          <span>❤️ {d.like_count||0}</span>
+                        </div>
+                      </div>
+                      <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`}}>
+                        <button onClick={e=>{e.stopPropagation(); onAI(d);}}
+                          style={{width:"100%", padding:"8px 0", border:`1px solid ${T.accentLight||T.accent+"44"}`, borderRadius:10, background:T.accentBg||T.accent+"11", color:T.accent, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5, minHeight:36}}>
+                          {d.ai_analysis ? "🤖 AI 분석 보기 · 저장됨" : "🤖 AI 분석 보기"}
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -1258,7 +1266,6 @@ ${diaryCtx}`;
       const [newNumber, setNewNumber] = useState(null);
       const [showWinPopup, setShowWinPopup] = useState(false);
       const [winnerWeek, setWinnerWeek] = useState(null);
-      const [claimName, setClaimName] = useState('');
       const [claimContact, setClaimContact] = useState('');
       const [claimSubmitted, setClaimSubmitted] = useState(false);
       const [countdown, setCountdown] = useState('');
@@ -1352,9 +1359,10 @@ ${diaryCtx}`;
       };
 
       const handleClaim = async () => {
-        if (!claimName.trim() || !claimContact.trim()) { alert('이름과 연락처를 모두 입력해주세요.'); return; }
+        if (!claimContact.trim()) { alert('전화번호를 입력해주세요.'); return; }
         const round = lastRound?.week_key === winnerWeek ? lastRound : currentRound;
-        await sb.from('raffle_claims').insert({ user_id: user.id, week_key: winnerWeek, name: claimName.trim(), contact: claimContact.trim(), claimed_number: round?.winning_number || 0 });
+        await sb.from('raffle_claims').insert({ user_id: user.id, week_key: winnerWeek, name: '-', contact: claimContact.trim(), claimed_number: round?.winning_number || 0 });
+        await sb.from('raffle_rounds').update({ winner_contact: claimContact.trim() }).eq('week_key', winnerWeek);
         setClaimSubmitted(true);
       };
 
@@ -1463,17 +1471,18 @@ ${diaryCtx}`;
                   <>
                     <div style={{ fontSize: 60, marginBottom: 12 }}>🎉</div>
                     <div style={{ fontSize: 22, fontWeight: 800, color: T.text, marginBottom: 6 }}>축하합니다!</div>
-                    <div style={{ fontSize: 14, color: T.textSub, marginBottom: 20, lineHeight: 1.7 }}>당첨되셨습니다!<br/>상품 수령을 위해 정보를 입력해주세요.</div>
-                    <input value={claimName} onChange={e => setClaimName(e.target.value)} placeholder="이름" style={{ width: "100%", padding: 14, borderRadius: 12, border: `1.5px solid ${T.border}`, background: T.input, fontSize: 15, outline: "none", color: T.text, marginBottom: 10, fontFamily: "inherit" }} />
-                    <input value={claimContact} onChange={e => setClaimContact(e.target.value)} placeholder="연락처 (전화번호)" style={{ width: "100%", padding: 14, borderRadius: 12, border: `1.5px solid ${T.border}`, background: T.input, fontSize: 15, outline: "none", color: T.text, marginBottom: 16, fontFamily: "inherit" }} />
-                    <button onClick={handleClaim} style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: T.gradient, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", minHeight: 52 }}>정보 제출하기</button>
+                    <div style={{ fontSize: 14, color: T.textSub, marginBottom: 8, lineHeight: 1.7 }}>이번 주 추첨에 당첨되셨습니다!</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: T.accent, marginBottom: 8 }}>☕ 메가커피 아메리카노 기프티콘</div>
+                    <div style={{ fontSize: 13, color: T.textSub, marginBottom: 20, lineHeight: 1.7 }}>2영업일 안으로 문자로 기프티콘을 발송해드립니다.<br/>수령하실 전화번호를 입력해주세요.</div>
+                    <input value={claimContact} onChange={e => setClaimContact(e.target.value)} placeholder="010-0000-0000" type="tel" style={{ width: "100%", padding: 14, borderRadius: 12, border: `1.5px solid ${T.border}`, background: T.input, fontSize: 15, outline: "none", color: T.text, marginBottom: 16, fontFamily: "inherit", textAlign: "center", letterSpacing: 1 }} />
+                    <button onClick={handleClaim} style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: T.gradient, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", minHeight: 52 }}>번호 제출하기</button>
                     <button onClick={() => setShowWinPopup(false)} style={{ marginTop: 10, background: "none", border: "none", fontSize: 13, color: T.textSub, cursor: "pointer" }}>나중에 하기</button>
                   </>
                 ) : (
                   <>
                     <div style={{ fontSize: 60, marginBottom: 12 }}>✅</div>
                     <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 8 }}>제출 완료!</div>
-                    <div style={{ fontSize: 14, color: T.textSub, marginBottom: 20, lineHeight: 1.7 }}>정보가 전달되었습니다.<br/>곧 연락드리겠습니다!</div>
+                    <div style={{ fontSize: 14, color: T.textSub, marginBottom: 20, lineHeight: 1.7 }}>2영업일 안으로 기프티콘을<br/>문자로 보내드리겠습니다!</div>
                     <button onClick={() => setShowWinPopup(false)} style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: T.gradient, color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", minHeight: 52 }}>확인</button>
                   </>
                 )}
@@ -2154,6 +2163,7 @@ ${diaryCtx}`;
             {mainTab==="diary" && (
               <div style={{padding:"16px 16px 12px"}}>
                 {dbLoading ? (<div style={{textAlign:"center", padding:40, color:T.textSub}}><div style={{fontSize:14}}>일기를 불러오는 중...</div></div>) : (<>
+                  <WeeklyAISummary diaries={diaries}/>
                   {/* 기록 버튼 + 드래프트 */}
                   {hasDraft && (
                     <div onClick={()=>setWriting(true)} style={{background:`linear-gradient(135deg, ${T.card}, ${T.accentBg})`, borderRadius:14, padding:"16px 18px", marginBottom:10, border:`1.5px dashed ${T.accent}`, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between", boxShadow:T.shadow, animation:"fadeIn 0.3s ease"}}>
