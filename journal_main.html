@@ -26,6 +26,7 @@
   <div id="root"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -1960,7 +1961,58 @@ ${diaryCtx}`;
       const photoCount = diaries.filter(d=>d.photo_url).length;
       const [loggingOut, setLoggingOut] = useState(false);
       const [showLegal, setShowLegal] = useState(null);
+      const [exporting, setExporting] = useState(false);
       const handleLogout = async () => { setLoggingOut(true); await logout(); };
+
+      const EMOTION_MAP = {"happy":"행복","grateful":"감사","calm":"평온","excited":"설렘","proud":"뿌듯","loving":"사랑","hopeful":"희망","amused":"즐거움","sad":"슬픔","angry":"분노","anxious":"불안","lonely":"외로움","tired":"지침","frustrated":"답답","guilty":"죄책감","jealous":"질투","bored":"지루함","confused":"혼란","nostalgic":"그리움","overwhelmed":"벅참","empty":"공허","regretful":"후회"};
+
+      const handleExportExcel = async () => {
+        if (exporting || !user) return;
+        setExporting(true);
+        try {
+          const wb = XLSX.utils.book_new();
+
+          // 시트1: 일기 전체
+          const diaryRows = diaries.sort((a,b)=>a.date.localeCompare(b.date)).map(d => {
+            const emos = (d.emotions||[]).map(e => `${EMOTION_MAP[e.key]||e.key}(${e.intensity}/5)`).join(', ');
+            return {
+              "날짜": d.date,
+              "제목": d.title||'',
+              "내용": (d.content||'').replace(/<[^>]*>/g,''),
+              "감정": emos,
+              "사진": d.photo_url ? '있음' : '',
+              "공개여부": d.is_public === false ? '비공개' : '공개',
+              "AI 분석": d.ai_analysis||''
+            };
+          });
+          const ws1 = XLSX.utils.json_to_sheet(diaryRows);
+          ws1['!cols'] = [{wch:12},{wch:25},{wch:60},{wch:30},{wch:6},{wch:8},{wch:50}];
+          XLSX.utils.book_append_sheet(wb, ws1, "일기");
+
+          // 시트2: 프로필 요약
+          const {data: profile} = await sb.from('user_profiles').select('*').eq('user_id', user.id).single();
+          const profileRows = [{
+            "이름": user.name||'',
+            "이메일": user.email||'',
+            "MBTI": profile?.mbti||'미설정',
+            "총 일기 수": diaries.length,
+            "연속 기록": streak,
+            "사진 기록": photoCount,
+            "가입일": profile?.created_at ? new Date(profile.created_at).toLocaleDateString('ko-KR') : ''
+          }];
+          const ws2 = XLSX.utils.json_to_sheet(profileRows);
+          ws2['!cols'] = [{wch:15},{wch:25},{wch:8},{wch:10},{wch:10},{wch:10},{wch:12}];
+          XLSX.utils.book_append_sheet(wb, ws2, "프로필");
+
+          const today = new Date().toISOString().slice(0,10);
+          XLSX.writeFile(wb, `GYEOL_내보내기_${today}.xlsx`);
+        } catch(err) {
+          console.error(err);
+          alert('내보내기 중 오류가 발생했습니다.');
+        } finally {
+          setExporting(false);
+        }
+      };
       return (
         <div style={{padding:"20px 16px", paddingBottom:20}}>
           {showLegal && <LegalModal type={showLegal} onClose={()=>setShowLegal(null)}/>}
@@ -1985,6 +2037,20 @@ ${diaryCtx}`;
             </button>
             <button onClick={()=>setShowLegal("privacy")} style={{width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", border:"none", background:"none", cursor:"pointer"}}>
               <span style={{fontSize:14, color:T.text}}>개인정보처리방침</span>
+              <span style={{fontSize:13, color:T.textSub}}>→</span>
+            </button>
+          </div>
+
+          <div style={{background:T.card, borderRadius:16, padding:"16px 20px", marginBottom:12, boxShadow:T.shadow}}>
+            <div style={{fontSize:14, fontWeight:700, color:T.text, marginBottom:12}}>내 데이터</div>
+            <button onClick={handleExportExcel} disabled={exporting} style={{width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", border:"none", background:"none", cursor:"pointer", opacity:exporting?0.6:1}}>
+              <div style={{display:"flex", alignItems:"center", gap:10}}>
+                <span style={{fontSize:18}}>📥</span>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontSize:14, color:T.text, fontWeight:600}}>{exporting ? "내보내는 중..." : "엑셀로 내보내기"}</div>
+                  <div style={{fontSize:11, color:T.textSub}}>일기 · 프로필 전체 다운로드</div>
+                </div>
+              </div>
               <span style={{fontSize:13, color:T.textSub}}>→</span>
             </button>
           </div>
