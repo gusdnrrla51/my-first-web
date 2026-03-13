@@ -1,29 +1,38 @@
 <!doctype html>
+<!-- ============================================================ -->
+<!-- 결(GYEOL) 다이어리 — 전체 앱이 이 파일 하나에 들어있습니다   -->
+<!-- 기술: React 18 + Supabase(데이터베이스/인증) + Gemini AI     -->
+<!-- ============================================================ -->
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="naver-site-verification" content="474f7b5bea0ef03b27f786936236a4a7d22017b9" />
-  <title>결 다이어리 | AI 일기와 느슨한 연대를 위한 일기쓰기 플랫폼</title>
-  <meta name="description" content="결 다이어리는 AI 일기 기능과 기록을 통해 느슨한 연대를 만드는 일기쓰기 플랫폼입니다. 하루의 감정과 생각을 기록하고 다른 사람들의 일기를 읽으며 연결되는 새로운 다이어리 경험을 제공합니다.">
-  <meta name="keywords" content="AI 일기, 일기, diary, 일기쓰기, 일기앱, 결 다이어리, 결, 느슨한 연대, 감정 기록, 온라인 다이어리, AI diary">
-  <meta name="robots" content="index,follow">
-  <link rel="canonical" href="https://www.gyeoldiary.com/">
+  <!-- ===== 기본 설정 ===== -->
+  <meta charset="utf-8"> <!-- 한글이 깨지지 않도록 문자 인코딩 설정 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"> <!-- 모바일 화면 크기에 맞춤 + 확대 방지 -->
+  <meta name="apple-mobile-web-app-capable" content="yes"> <!-- 아이폰에서 홈 화면 앱처럼 보이게 -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"> <!-- 아이폰 상태바 스타일 -->
+  <meta name="naver-site-verification" content="474f7b5bea0ef03b27f786936236a4a7d22017b9" /> <!-- 네이버 검색엔진에 사이트 등록 인증 -->
+  <!-- ===== SEO(검색엔진 최적화) 메타 태그 ===== -->
+  <title>결 다이어리 | AI 일기와 느슨한 연대를 위한 일기쓰기 플랫폼</title> <!-- 브라우저 탭에 표시되는 제목 + 구글 검색 결과 제목 -->
+  <meta name="description" content="결 다이어리는 AI 일기 기능과 기록을 통해 느슨한 연대를 만드는 일기쓰기 플랫폼입니다. 하루의 감정과 생각을 기록하고 다른 사람들의 일기를 읽으며 연결되는 새로운 다이어리 경험을 제공합니다."> <!-- 구글 검색 결과에 표시되는 설명 -->
+  <meta name="keywords" content="AI 일기, 일기, diary, 일기쓰기, 일기앱, 결 다이어리, 결, 느슨한 연대, 감정 기록, 온라인 다이어리, AI diary"> <!-- 검색 키워드 -->
+  <meta name="robots" content="index,follow"> <!-- 검색엔진이 이 페이지를 수집하도록 허용 -->
+  <link rel="canonical" href="https://www.gyeoldiary.com/"> <!-- 대표 URL 지정 (중복 페이지 방지) -->
 
+  <!-- ===== OG(오픈그래프) 태그 — 카카오톡/페이스북 등에서 링크 공유 시 미리보기 ===== -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="결 다이어리 | AI 일기와 느슨한 연대를 만드는 일기앱">
   <meta property="og:description" content="AI와 함께 하루를 기록하고 사람들과 느슨하게 연결되는 새로운 일기쓰기 경험. 결 다이어리에서 당신의 하루를 기록하세요.">
   <meta property="og:url" content="https://www.gyeoldiary.com/">
   <meta property="og:site_name" content="Gyeol Diary">
-  <meta property="og:image" content="https://www.gyeoldiary.com/og-image.jpg">
+  <meta property="og:image" content="https://www.gyeoldiary.com/og-image.jpg"> <!-- 공유 시 보이는 대표 이미지 -->
 
+  <!-- ===== 트위터 카드 — 트위터에서 링크 공유 시 미리보기 ===== -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="결 다이어리 | AI 일기 플랫폼">
   <meta name="twitter:description" content="AI 일기 기능과 감정 기록을 통해 느슨한 연대를 만드는 다이어리 서비스">
   <meta name="twitter:image" content="https://www.gyeoldiary.com/og-image.jpg">
 
+  <!-- ===== 구조화 데이터 (JSON-LD) — 구글이 사이트 정보를 더 잘 이해하도록 도움 ===== -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -46,37 +55,43 @@
   }
   </script>
 
+  <!-- ===== 폰트 로딩 — 한글 폰트 'Noto Sans KR' 사용 ===== -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
+  <!-- ===== 전체 CSS 스타일 ===== -->
   <style>
-    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-    html { height:100%; min-height:100vh; }
-    body { font-family:'Noto Sans KR',sans-serif; -webkit-font-smoothing:antialiased; height:100%; overscroll-behavior:none; }
-    input, textarea, button, select { font-family:inherit; }
-    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
-    @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
-    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-    ::-webkit-scrollbar { display:none; }
-    * { scrollbar-width:none; }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; } /* 모든 요소의 기본 여백 제거 */
+    html { height:100%; min-height:100vh; } /* 화면 전체 높이 사용 */
+    body { font-family:'Noto Sans KR',sans-serif; -webkit-font-smoothing:antialiased; height:100%; overscroll-behavior:none; } /* 기본 폰트 설정 + 바운스 스크롤 방지 */
+    input, textarea, button, select { font-family:inherit; } /* 입력 요소도 같은 폰트 사용 */
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} } /* 로딩 애니메이션: 두근두근 커졌다 작아지는 효과 */
+    @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} } /* 아래에서 위로 올라오는 애니메이션 */
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} } /* 서서히 나타나는 애니메이션 */
+    ::-webkit-scrollbar { display:none; } /* 스크롤바 숨기기 (크롬/사파리) */
+    * { scrollbar-width:none; } /* 스크롤바 숨기기 (파이어폭스) */
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"></div> <!-- 이 안에 React 앱 전체가 렌더링됩니다 -->
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- ===== 외부 라이브러리 로딩 ===== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> <!-- Supabase: 데이터베이스 + 로그인 시스템 -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script> <!-- SheetJS: 엑셀 파일 내보내기용 -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script> <!-- React: 화면(UI) 구성 라이브러리 -->
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script> <!-- ReactDOM: React를 웹페이지에 연결 -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script> <!-- Babel: 최신 문법을 브라우저가 이해할 수 있게 변환 -->
 
+  <!-- ===== 여기서부터 앱의 실제 코드가 시작됩니다 ===== -->
   <script type="text/babel">
+    // React에서 자주 쓰는 기능들을 미리 가져옴
     const { useState, useRef, useEffect, createContext, useContext, useCallback } = React;
 
+    // ===== Supabase 연결 설정 (데이터베이스 서버 주소와 접속 키) =====
     const SUPABASE_URL = 'https://vgtpjvwtpzvxxlizsvos.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs';
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); // Supabase 클라이언트 생성 — 이걸로 DB 읽기/쓰기, 로그인 등을 처리
 
     // ========================================================
     // 📷 사진 signed URL 헬퍼 (private 버킷용)
@@ -124,17 +139,35 @@
       }
     }
 
+    // ========================================================
+    // 🎨 테마 색상 설정 — 앱 전체에서 사용하는 색상 모음
+    // 색상을 바꾸고 싶으면 여기서 값을 변경하면 앱 전체에 적용됩니다
+    // ========================================================
     const T = {
-      bg:"#F5F0E8", card:"#FFFCF7", accent:"#B8956A", accentLight:"#D4B896",
-      accentBg:"#F0E6D6", text:"#4A3728", textSub:"#8B7355", border:"#E8DFD0",
-      hover:"#EDE5D8", shadow:"0 2px 12px rgba(139,115,85,0.08)",
-      shadowHover:"0 6px 24px rgba(139,115,85,0.14)",
-      gradient:"linear-gradient(135deg,#B8956A,#9B7B5A)",
-      input:"#F0EBE1", divider:"#E5DDD0", textMuted:"#A89F90",
-      danger:"#C97064", success:"#8DB580",
+      bg:"#F5F0E8",        // 배경색 (연한 베이지)
+      card:"#FFFCF7",      // 카드 배경색 (거의 흰색)
+      accent:"#B8956A",    // 포인트 색상 (갈색 계열 — 버튼, 강조 텍스트 등)
+      accentLight:"#D4B896", // 포인트 연한 버전
+      accentBg:"#F0E6D6",  // 포인트 배경색
+      text:"#4A3728",      // 기본 글자 색
+      textSub:"#8B7355",   // 보조 글자 색 (설명문 등)
+      border:"#E8DFD0",    // 테두리 색
+      hover:"#EDE5D8",     // 마우스 올렸을 때 색
+      shadow:"0 2px 12px rgba(139,115,85,0.08)",       // 기본 그림자
+      shadowHover:"0 6px 24px rgba(139,115,85,0.14)",   // 강조 그림자
+      gradient:"linear-gradient(135deg,#B8956A,#9B7B5A)", // 그라데이션 (버튼에 사용)
+      input:"#F0EBE1",     // 입력칸 배경색
+      divider:"#E5DDD0",   // 구분선 색
+      textMuted:"#A89F90",  // 흐린 글자 색
+      danger:"#C97064",    // 경고/위험 색 (빨간 계열)
+      success:"#8DB580",   // 성공 색 (초록 계열)
     };
 
-    // NVC 느낌말 기반 감정 카테고리
+    // ========================================================
+    // 🎭 감정 목록 — 일기 작성 시 선택할 수 있는 감정들
+    // "긍정"과 "부정" 두 그룹으로 나뉘고, 각 그룹 안에 세부 감정이 있음
+    // key: 내부 식별용, emoji: 화면에 표시할 이모지, label: 한글 이름
+    // ========================================================
     const EMOTION_CATEGORIES = [
       { label:"긍정", groups: [
         { group:"감동·감사", color:"#C4A265", emotions: [
@@ -172,31 +205,38 @@
       ]},
     ];
 
-    // 플랫 맵 — 기존 코드 호환용
+    // 감정 데이터를 하나의 객체로 정리 (다른 코드에서 쉽게 접근하기 위함)
     const EMOTIONS = {};
     EMOTION_CATEGORIES.forEach(cat => cat.groups.forEach(g => g.emotions.forEach(e => {
       EMOTIONS[e.key] = { emoji: e.emoji, label: e.label, color: g.color };
     })));
-    const EMO_KEYS = Object.keys(EMOTIONS);
-    const ACTIVITIES = ["🏃 운동","📚 독서","🎵 음악","🍳 요리","🎮 게임","☕ 카페","🎬 영화","💻 코딩","🧘 명상","📸 사진","🛒 쇼핑","👥 모임","🚶 산책","🏠 집"];
-    const INTENSITY = ["매우 약함","약함","보통","강함","매우 강함"];
+    const EMO_KEYS = Object.keys(EMOTIONS); // 모든 감정의 key 목록
+    const ACTIVITIES = ["🏃 운동","📚 독서","🎵 음악","🍳 요리","🎮 게임","☕ 카페","🎬 영화","💻 코딩","🧘 명상","📸 사진","🛒 쇼핑","👥 모임","🚶 산책","🏠 집"]; // 활동 목록 (현재 미사용)
+    const INTENSITY = ["매우 약함","약함","보통","강함","매우 강함"]; // 감정 강도 단계 (1~5)
 
-    const today = () => new Date().toISOString().slice(0,10);
-    const fmt = d => {
+    // ===== 날짜 관련 도구 함수들 =====
+    const today = () => new Date().toISOString().slice(0,10); // 오늘 날짜를 "2026-03-13" 형식으로 반환
+    const fmt = d => { // 날짜를 "3/13 (금)" 형식으로 변환
       const x = new Date(d+"T00:00:00");
       const w = ["일","월","화","수","목","금","토"];
       return `${x.getMonth()+1}/${x.getDate()} (${w[x.getDay()]})`;
     };
-    const fmtFull = d => {
+    const fmtFull = d => { // 날짜를 "2026년 3월 13일 금요일" 형식으로 변환
       const x = new Date(d+"T00:00:00");
       const w = ["일","월","화","수","목","금","토"];
       return `${x.getFullYear()}년 ${x.getMonth()+1}월 ${x.getDate()}일 ${w[x.getDay()]}요일`;
     };
-    const isToday = d => d === today();
+    const isToday = d => d === today(); // 해당 날짜가 오늘인지 확인
 
+    // ===== 인증(로그인) 상태 관리 =====
+    // AuthCtx: 앱 전체에서 로그인한 사용자 정보를 공유하기 위한 "공유 창고"
     const AuthCtx = createContext(null);
-    const useAuth = () => useContext(AuthCtx);
+    const useAuth = () => useContext(AuthCtx); // 어디서든 useAuth()로 로그인 정보 접근 가능
 
+    // ========================================================
+    // 🔐 AuthProvider — 로그인/회원가입/로그아웃 기능을 관리하는 컴포넌트
+    // 앱 전체를 감싸서 어디서든 로그인 상태를 확인할 수 있게 해줌
+    // ========================================================
     function AuthProvider({children}) {
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -473,6 +513,10 @@
       </>);
     }
 
+    // ========================================================
+    // ⏳ LoadingScreen — 로딩 화면 (앱이 데이터를 불러올 때 표시)
+    // "GYEOL" 로고가 두근두근 애니메이션으로 표시됨
+    // ========================================================
     function LoadingScreen({text="나의 결을 불러오는 중..."}) {
       return (
         <div style={{position:"fixed",inset:0,background:T.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -484,6 +528,13 @@
       );
     }
 
+    // ========================================================
+    // 🔑 LoginPage — 로그인/회원가입/비밀번호 찾기 화면
+    // - Google 소셜 로그인 지원
+    // - 이메일/비밀번호 로그인
+    // - 회원가입 시 이용약관 + 개인정보처리방침 동의 필수
+    // - 비밀번호 찾기 (이메일로 재설정 링크 발송)
+    // ========================================================
     function LoginPage() {
       const {login, signup, loading} = useAuth();
       const [mode, setMode] = useState("login");
@@ -563,10 +614,9 @@
     }
 
     // ========================================================
-    // ✏️ DiaryWritePage
-    // ========================================================
-    // ========================================================
-    // 🎭 EmotionSelector — 긍정/부정 탭 + 감정 칩 + 컴팩트 강도
+    // 🎭 EmotionSelector — 감정 선택 화면
+    // 일기 작성 시 "긍정/부정" 탭 전환 → 세부 감정 칩 선택 → 강도(1~5) 설정
+    // 하나의 감정만 선택 가능 (다시 누르면 해제)
     // ========================================================
     function EmotionSelector({selEmotions, setSelEmotions}) {
       const [activeTab, setActiveTab] = useState(0);
@@ -638,6 +688,13 @@
       );
     }
 
+    // ========================================================
+    // ✏️ DiaryWritePage — 일기 작성/수정 전체 화면
+    // 1단계: 감정 선택 → 2단계: 제목+본문+사진 작성 → 저장
+    // - 자동 임시 저장 기능 (브라우저 localStorage에 저장)
+    // - 사진 업로드 (최대 2MB, Supabase 스토리지에 저장)
+    // - 수정 시 기존 데이터를 불러와서 편집
+    // ========================================================
     function DiaryWritePage({onSave, onCancel, editData}) {
       const {user} = useAuth();
       const DRAFT_KEY = `gyeol_draft_${today()}`;
@@ -774,7 +831,9 @@
     }
 
     // ========================================================
-    // 📅 MonthNavigator — 월 이동 + 뷰모드 탭
+    // 📅 MonthNavigator — 월 이동 + 뷰모드 전환 버튼
+    // ◀ 2026년 3월 ▶ 형태로 이전/다음 달 이동
+    // "월간" / "일간" 보기 모드 전환 탭
     // ========================================================
     function MonthNavigator({viewMonth, setViewMonth, calView, setCalView}) {
       const [y, m] = viewMonth.split("-").map(Number);
@@ -804,7 +863,10 @@
     }
 
     // ========================================================
-    // 📋 DailyCalendarView — 날짜별 타임라인 리스트
+    // 📋 DailyCalendarView — "일간" 보기 모드
+    // 세로 타임라인 형태로 날짜별 일기 카드를 표시
+    // 각 카드에서 일기 상세보기, AI 분석 보기 가능
+    // 점선으로 연결된 타임라인 디자인
     // ========================================================
     function DailyCalendarView({diaries, viewMonth, onSelect, onAI}) {
       const [y, m] = viewMonth.split("-").map(Number);
@@ -872,7 +934,9 @@
     }
 
     // ========================================================
-    // 📆 MonthlyCalendarView — 달력 그리드 + 통계
+    // 📆 MonthlyCalendarView — "월간" 보기 모드
+    // 일반 달력(7열 그리드) 형태로 한 달을 표시
+    // 일기 쓴 날에 빨간 점 표시 + 이번 달 기록률(%) 통계 제공
     // ========================================================
     function MonthlyCalendarView({diaries, viewMonth, onSelect}) {
       const [y, m] = viewMonth.split("-").map(Number);
@@ -940,7 +1004,10 @@
     }
 
     // ========================================================
-    // 📊 WeeklyAISummary — 최근 7일 일기 자동 AI 분석 카드
+    // 📊 WeeklyAISummary — "이번 주 나의 결" AI 분석 카드
+    // 최근 7일간 쓴 일기를 Gemini AI가 자동으로 분석하여
+    // 감정 흐름과 응원 메시지를 보여줌
+    // 결과는 localStorage에 캐싱하여 같은 일기에 대해 재분석 방지
     // ========================================================
     function WeeklyAISummary({ diaries }) {
       const last7 = diaries.filter(d => {
@@ -1002,7 +1069,10 @@
     }
 
     // ========================================================
-    // 🤖 DiaryAIModal — 일기 1개 AI 분석 바텀시트
+    // 🤖 DiaryAIModal — 개별 일기 AI 분석 팝업 (아래에서 올라오는 시트)
+    // 특정 일기 하나를 Gemini AI가 분석하여 감정/하이라이트/응원 제공
+    // 분석 결과는 DB(ai_analysis 컬럼)에 저장 + localStorage 캐싱
+    // 이미 분석한 일기는 재분석 없이 저장된 결과를 바로 표시
     // ========================================================
     function DiaryAIModal({ diary, onClose, onAnalysisSaved }) {
       const cacheKey = `gyeol_ai_${diary.date}`;
@@ -1063,7 +1133,8 @@
     }
 
     // ========================================================
-    // 📖 DiaryDetail
+    // 📖 DiaryDetail — 일기 상세 보기 화면 (전체 화면)
+    // 날짜, 제목, 본문, 감정(강도 바), 사진을 보여줌
     // ========================================================
     function DiaryDetail({diary, onBack}) {
       const [signedPhotoUrl, setSignedPhotoUrl] = useState(null);
@@ -1104,6 +1175,11 @@
       );
     }
 
+    // ========================================================
+    // ☕ AIChatModal — AI 채팅 모달 ("나의 결 분석" 대화 창)
+    // 사용자가 자유롭게 질문하면 AI가 일기 기록을 바탕으로 답변
+    // 예: "내 감정 패턴이 어때?", "요즘 내 기분은?"
+    // ========================================================
     function AIChatModal({onClose, diaries}) {
       const [msgs, setMsgs] = useState([{role:"ai", text:"안녕하세요! GYEOL AI예요 ☕\n\n기록된 일기를 바탕으로 당신의 결을 함께 들여다볼게요.\n\n이런 걸 물어볼 수 있어요:\n• \"내 감정 패턴이 어때?\"\n• \"요즘 내 기분은 어떤 흐름이야?\"\n• \"내 결을 분석해줘\""}]);
       const [input, setInput] = useState(""); const [loading, setLoading] = useState(false);
@@ -1167,7 +1243,9 @@ ${chatHistory}
     }
 
     // ========================================================
-    // 🧠 MBTI 분석 — 일기 기반 (파일럿: 1개 이상이면 분석 가능)
+    // 🧠 MBTI 분석 함수 — 일기 내용을 AI가 분석하여 MBTI 추측
+    // 최근 일기 최대 7개를 Gemini에게 보내서 E/I, S/N, T/F, J/P 판별
+    // 결과는 user_profiles 테이블에 저장됨
     // ========================================================
     async function analyzeMBTI(diaries, userId, displayName) {
       // 최신 일기 최대 7개 사용 (1개만 있어도 분석 가능)
@@ -1240,7 +1318,9 @@ ${diaryCtx}`;
       }
     }
 
-    // MBTI → 기질 그룹 매핑
+    // ===== MBTI → 기질 그룹 매핑 =====
+    // 16개 MBTI를 4개 기질 그룹으로 분류 (커뮤니티 채팅방 배정에 사용)
+    // NT=분석가형, NF=외교관형, SJ=관리자형, SP=탐험가형
     const TEMPERAMENT_MAP = {
       INTJ:"NT", INTP:"NT", ENTJ:"NT", ENTP:"NT",
       INFJ:"NF", INFP:"NF", ENFJ:"NF", ENFP:"NF",
@@ -1261,8 +1341,14 @@ ${diaryCtx}`;
     };
 
     // ========================================================
-    // 🎟️ RaffleTab — 응모 이벤트
+    // 🎟️ 래플(응모) 시스템 — 일기를 쓰면 응모권을 받고 추첨에 참여
+    // - 일기 1개 작성 = 응모권 1개
+    // - 응모 시 1~10,000 사이 랜덤 번호 부여
+    // - 매주 토요일 18시 마감, 20시 추첨, 21시 새 주차 시작
+    // - 당첨 시 메가커피 기프티콘 증정
     // ========================================================
+
+    // 현재 날짜가 몇 년도 몇 번째 주인지 계산 (예: "2026-W11")
     function getWeekKey(date = new Date()) {
       const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
       d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
@@ -1271,6 +1357,7 @@ ${diaryCtx}`;
       return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
     }
 
+    // 현재 응모 상태 확인: open(응모 가능) / closed(마감) / drawing(추첨 중)
     function getRaffleStatus() {
       const now = new Date();
       const day = now.getDay();
@@ -1283,6 +1370,7 @@ ${diaryCtx}`;
       return 'open';
     }
 
+    // 다음 응모 마감 시각 계산 (토요일 오후 6시)
     function getNextDeadline() {
       const now = new Date();
       const day = now.getDay();
@@ -1297,6 +1385,7 @@ ${diaryCtx}`;
       return deadline;
     }
 
+    // RaffleTab — "응모" 탭 화면 (카운트다운, 응모하기 버튼, 내 번호, 당첨 결과, 당첨 팝업)
     function RaffleTab({ ticketCount, onTicketChange }) {
       const { user } = useAuth();
       const [loading, setLoading] = useState(true);
@@ -1535,7 +1624,11 @@ ${diaryCtx}`;
     }
 
     // ========================================================
-    // 🔗 CommunityTab — 기질 그룹방 중심 연대
+    // 🔗 CommunityTab — "연대" 탭 화면
+    // 1) MBTI 분석 전: "나의 MBTI를 알아보세요" 안내 + 분석 버튼
+    // 2) MBTI 분석 후: 나의 MBTI 카드 + 기질 그룹 채팅방 입장
+    // - MBTI는 7일 쿨다운 (7일에 한 번만 재분석 가능)
+    // - 분석 후 자동으로 같은 기질 그룹방에 참여
     // ========================================================
     function CommunityTab({ diaries }) {
       const { user } = useAuth();
@@ -1760,7 +1853,12 @@ ${diaryCtx}`;
     }
 
     // ========================================================
-    // 💬 ChatRoom — MBTI 채팅방
+    // 💬 ChatRoom — MBTI 기질 그룹 채팅방
+    // 같은 기질(NT/NF/SJ/SP) 사용자들끼리 채팅
+    // - 30초마다 새 메시지 자동 갱신 (폴링 방식)
+    // - 낙관적 업데이트: 메시지 전송 시 즉시 화면에 표시
+    // - 날짜별 구분선, 시간 표시, 프로필 이니셜 아바타
+    // - 쿨다운 기간 중에는 방 나가기 불가 (잠금 표시)
     // ========================================================
     function ChatRoom({ roomId, mbti, onBack, lockLeave = false, cooldownRemaining = 0 }) {
       const { user } = useAuth();
@@ -1974,6 +2072,11 @@ ${diaryCtx}`;
       );
     }
 
+    // ========================================================
+    // ✨ StatsTab — "나의 결" 탭 화면
+    // 전체 일기에서 감정 통계를 보여줌 (감정별 점수 합산, 순위, 바 차트)
+    // "AI에게 나의 결 물어보기" 버튼으로 AI 채팅 열기
+    // ========================================================
     function StatsTab({diaries, onOpenAI}) {
       const allEmo = {}; diaries.forEach(d=>(d.emotions||[]).forEach(e=>{allEmo[e.key]=(allEmo[e.key]||0)+e.intensity;}));
       const emoSorted = Object.entries(allEmo).sort((a,b)=>b[1]-a[1]); const maxEmo = emoSorted[0]?.[1]||1;
@@ -1996,6 +2099,14 @@ ${diaryCtx}`;
       );
     }
 
+    // ========================================================
+    // 👤 MyPage — "마이페이지" 탭 화면
+    // - 프로필 정보 (이름, 이메일, 기록 통계)
+    // - 이용약관 / 개인정보처리방침 보기
+    // - 엑셀 내보내기 (일기+프로필 데이터를 .xlsx 파일로 다운로드)
+    // - 문의하기 (이메일 연결)
+    // - 로그아웃 버튼
+    // ========================================================
     function MyPage({diaries, streak}) {
       const {user, logout} = useAuth();
       const photoCount = diaries.filter(d=>d.photo_url).length;
@@ -2117,25 +2228,31 @@ ${diaryCtx}`;
       );
     }
 
+    // ========================================================
+    // 🏠 MainApp — 앱의 메인 화면 (로그인 후 보이는 화면)
+    // 하단 탭 네비게이션: 일기 / 응모 / 연대 / 나의 결 / 마이
+    // 상단 헤더: GYEOL 로고 + 검색 + 연속기록 + 응모권
+    // 각 탭을 누르면 해당 화면으로 전환
+    // ========================================================
     function MainApp() {
-      const {user} = useAuth();
-      const [diaries, setDiaries] = useState([]);
-      const [dbLoading, setDbLoading] = useState(true);
-      const [mainTab, setMainTab] = useState(() => {
+      const {user} = useAuth(); // 현재 로그인한 사용자 정보
+      const [diaries, setDiaries] = useState([]); // 사용자의 모든 일기 목록
+      const [dbLoading, setDbLoading] = useState(true); // DB에서 일기 불러오는 중 여부
+      const [mainTab, setMainTab] = useState(() => { // 현재 선택된 탭 (URL 해시 기반)
         const hash = window.location.hash.slice(1);
         return ["diary","raffle","community","stats","mypage"].includes(hash) ? hash : "diary";
       });
-      const [ticketCount, setTicketCount] = useState(0);
-      const [selected, setSelected] = useState(null);
-      const [writing, setWriting] = useState(false);
-      const [showAI, setShowAI] = useState(false);
-      const [savedToast, setSavedToast] = useState(false);
-      const [showEditConfirm, setShowEditConfirm] = useState(false);
-      const [aiDiary, setAiDiary] = useState(null);
-      const [showFloatingBtn, setShowFloatingBtn] = useState(false);
-      const [searchQuery, setSearchQuery] = useState("");
-      const [showSearch, setShowSearch] = useState(false);
-      const [showSurveyPopup, setShowSurveyPopup] = useState(false);
+      const [ticketCount, setTicketCount] = useState(0); // 보유 응모권 수
+      const [selected, setSelected] = useState(null); // 선택한 일기 (상세보기용)
+      const [writing, setWriting] = useState(false); // 일기 작성 화면 열림 여부
+      const [showAI, setShowAI] = useState(false); // AI 채팅 모달 열림 여부
+      const [savedToast, setSavedToast] = useState(false); // "저장 완료" 토스트 메시지 표시
+      const [showEditConfirm, setShowEditConfirm] = useState(false); // "이미 작성했는데 수정할까요?" 확인 팝업
+      const [aiDiary, setAiDiary] = useState(null); // AI 분석할 일기 (분석 모달용)
+      const [showFloatingBtn, setShowFloatingBtn] = useState(false); // 스크롤 시 상단 플로팅 기록 버튼 표시
+      const [searchQuery, setSearchQuery] = useState(""); // 검색어
+      const [showSearch, setShowSearch] = useState(false); // 검색바 표시 여부
+      const [showSurveyPopup, setShowSurveyPopup] = useState(false); // 첫 일기 작성 후 설문 팝업
       const [viewMonth, setViewMonth] = useState(() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; });
       const [calView, setCalView] = useState("일");
       const recordBtnRef = useRef(null);
@@ -2204,6 +2321,10 @@ ${diaryCtx}`;
         return true;
       });
 
+      // ===== 일기 저장 처리 함수 =====
+      // 오늘 이미 쓴 일기가 있으면 수정(update), 없으면 새로 생성(insert)
+      // 새 일기 생성 시 응모권 1개 자동 지급
+      // 첫 일기 작성 시 설문 팝업 표시
       const handleSaveDiary = async (data) => {
         const existing = diaries.find(d=>d.date===today());
         if (existing) {
@@ -2234,6 +2355,7 @@ ${diaryCtx}`;
         if (isFirstDiary) setTimeout(() => setShowSurveyPopup(true), 800);
       };
 
+      // 하단 탭 메뉴 목록
       const tabs = [{id:"diary",label:"일기",icon:"📝"},{id:"raffle",label:"응모",icon:"🎟️"},{id:"community",label:"연대",icon:"🔗"},{id:"stats",label:"나의 결",icon:"✨"},{id:"mypage",label:"마이",icon:"👤"}];
 
       if (writing) return (<DiaryWritePage onSave={handleSaveDiary} onCancel={()=>setWriting(false)} editData={todayWritten?diaries.find(d=>d.date===today()):null}/>);
@@ -2363,11 +2485,18 @@ ${diaryCtx}`;
       );
     }
 
+    // ========================================================
+    // 🚦 AuthRouter — 로그인 여부에 따라 화면 분기
+    // 로그인 됨 → MainApp(메인 화면) 표시
+    // 로그인 안 됨 → LoginPage(로그인 화면) 표시
+    // ========================================================
     function AuthRouter() {
       const {user, loading} = useAuth();
       if (loading) return <LoadingScreen text="나의 결을 발견하는 중..."/>;
       return user ? <MainApp/> : <LoginPage/>;
     }
+
+    // ===== 앱 시작점 — 모든 것을 조합하여 화면에 렌더링 =====
     function App() { return <AuthProvider><AuthRouter/></AuthProvider>; }
     ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
   </script>
