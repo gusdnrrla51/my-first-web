@@ -2095,6 +2095,7 @@ ${diaryCtx}`;
       const [showFloatingBtn, setShowFloatingBtn] = useState(false);
       const [searchQuery, setSearchQuery] = useState("");
       const [showSearch, setShowSearch] = useState(false);
+      const [showSurveyPopup, setShowSurveyPopup] = useState(false);
       const [viewMonth, setViewMonth] = useState(() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; });
       const [calView, setCalView] = useState("일");
       const recordBtnRef = useRef(null);
@@ -2186,8 +2187,11 @@ ${diaryCtx}`;
           }
           else { console.error(error); alert("저장 중 오류가 발생했습니다."); return; }
         }
+        // 첫 일기 작성 시 설문 팝업 표시
+        const isFirstDiary = diaries.length === 0 && !existing;
         setWriting(false);
         setSavedToast(true); setTimeout(()=>setSavedToast(false), 2200);
+        if (isFirstDiary) setTimeout(() => setShowSurveyPopup(true), 800);
       };
 
       const tabs = [{id:"diary",label:"일기",icon:"📝"},{id:"raffle",label:"응모",icon:"🎟️"},{id:"community",label:"연대",icon:"🔗"},{id:"stats",label:"나의 결",icon:"✨"},{id:"mypage",label:"마이",icon:"👤"}];
@@ -2299,6 +2303,20 @@ ${diaryCtx}`;
           {savedToast && (
             <div style={{position:"fixed", bottom:`calc(env(safe-area-inset-bottom,0px) + 72px)`, left:"50%", transform:"translateX(-50%)", background:T.accent, color:"#fff", padding:"13px 28px", borderRadius:14, fontSize:14, fontWeight:600, boxShadow:`0 8px 32px ${T.accent}66`, zIndex:2000, whiteSpace:"nowrap", animation:"slideUp 0.3s ease"}}>
               ✨ 오늘의 결이 저장되었어요
+            </div>
+          )}
+          {showSurveyPopup && (
+            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:3000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+              <div style={{ background:T.card, borderRadius:20, padding:"30px 24px", maxWidth:360, width:"100%", textAlign:"center", position:"relative", animation:"slideUp 0.4s ease" }}>
+                <button onClick={()=>setShowSurveyPopup(false)} style={{ position:"absolute", top:14, right:14, background:"none", border:"none", fontSize:20, color:T.textSub, cursor:"pointer", padding:4, lineHeight:1 }}>✕</button>
+                <div style={{ fontSize:48, marginBottom:16 }}>📝</div>
+                <div style={{ fontSize:18, fontWeight:800, color:T.text, marginBottom:12 }}>첫 일기를 축하해요!</div>
+                <div style={{ fontSize:14, color:T.textSub, lineHeight:1.8, marginBottom:24, wordBreak:"keep-all" }}>
+                  첫 일기를 작성해주셔서 감사합니다.<br/>고객님의 경험을 짧게 나눠주세요.<br/>제품을 개선하는데 큰 도움이 됩니다.
+                </div>
+                <a href="https://forms.gle/jYtGvJwaKq21vZie9" target="_blank" rel="noopener noreferrer" onClick={()=>setShowSurveyPopup(false)} style={{ display:"block", width:"100%", padding:16, borderRadius:14, border:"none", background:T.gradient, color:"#fff", fontSize:16, fontWeight:700, cursor:"pointer", textDecoration:"none", minHeight:52, lineHeight:"20px" }}>설문하러 가기</a>
+                <button onClick={()=>setShowSurveyPopup(false)} style={{ marginTop:10, background:"none", border:"none", fontSize:13, color:T.textSub, cursor:"pointer" }}>다음에 할게요</button>
+              </div>
             </div>
           )}
         </div>
