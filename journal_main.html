@@ -94,6 +94,51 @@
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); // Supabase 클라이언트 생성 — 이걸로 DB 읽기/쓰기, 로그인 등을 처리
 
     // ========================================================
+    // 👀 누적 방문자 카운터 — site_stats 테이블 사용
+    // 페이지 방문 시 카운트 +1, 화면 하단에 표시
+    // ========================================================
+    async function incrementVisitCount() {
+      try {
+        // 세션당 1번만 카운트 (같은 탭에서 새로고침해도 중복 방지)
+        if (sessionStorage.getItem('gyeol_visited')) {
+          // 이미 카운트했으면 현재 값만 가져옴
+          const { data } = await sb.from('site_stats').select('value').eq('key', 'visit_count').single();
+          return data?.value || 0;
+        }
+        sessionStorage.setItem('gyeol_visited', '1');
+
+        // visit_count 값을 1 증가시키고 결과를 가져옴
+        const { data: existing } = await sb.from('site_stats').select('value').eq('key', 'visit_count').single();
+        if (existing) {
+          const newVal = (existing.value || 0) + 1;
+          await sb.from('site_stats').update({ value: newVal }).eq('key', 'visit_count');
+          return newVal;
+        } else {
+          // 테이블에 데이터가 없으면 새로 생성
+          await sb.from('site_stats').insert({ key: 'visit_count', value: 1 });
+          return 1;
+        }
+      } catch (e) {
+        console.error('방문자 카운트 오류:', e);
+        return 0;
+      }
+    }
+
+    // 방문자 수를 표시하는 컴포넌트
+    function VisitorCounter() {
+      const [count, setCount] = useState(null);
+      useEffect(() => {
+        incrementVisitCount().then(setCount);
+      }, []);
+      if (count === null) return null;
+      return (
+        <div style={{ textAlign:"center", fontSize:11, color:T.textMuted, padding:"8px 0" }}>
+          누적 방문객: {count.toLocaleString()}명
+        </div>
+      );
+    }
+
+    // ========================================================
     // 📷 사진 signed URL 헬퍼 (private 버킷용)
     // ========================================================
     const photoUrlCache = {};
@@ -609,6 +654,7 @@
               <button onClick={()=>{setMode("login");setError("");}} style={{width:"100%", padding:12, background:"none", border:"none", color:T.textSub, fontSize:14, cursor:"pointer", marginTop:6, minHeight:44}}>← 로그인으로</button>
             </>)}
           </div>
+          <VisitorCounter/>
         </div>
       );
     }
@@ -2223,6 +2269,7 @@ ${diaryCtx}`;
 
           <div style={{textAlign:"center", marginTop:20, fontSize:11, color:T.textSub, lineHeight:1.8}}>
             <div>© 2026 GYEOL. All rights reserved.</div>
+            <VisitorCounter/>
           </div>
         </div>
       );
