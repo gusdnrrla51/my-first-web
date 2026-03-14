@@ -1450,7 +1450,13 @@ ${diaryCtx}`;
       const currentWeek = getWeekKey();
       const activeWeek = (() => {
         const now = new Date();
+        // 토요일 21시 이후: 월요일 기준으로 다음 주차 계산
         if (now.getDay() === 6 && now.getHours() >= 21) {
+          const next = new Date(now); next.setDate(next.getDate() + 2);
+          return getWeekKey(next);
+        }
+        // 일요일: 월요일 기준으로 다음 주차 계산
+        if (now.getDay() === 0) {
           const next = new Date(now); next.setDate(next.getDate() + 1);
           return getWeekKey(next);
         }
@@ -1603,18 +1609,6 @@ ${diaryCtx}`;
               </div>
             )}
           </div>
-
-          {/* 지난주 당첨 결과 */}
-          {lastRound?.status === 'drawn' && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>🏆 지난주 당첨 결과</div>
-              <div style={{ background: T.card, borderRadius: 14, padding: "20px", boxShadow: T.shadow, textAlign: "center" }}>
-                <div style={{ fontSize: 13, color: T.textSub, marginBottom: 8 }}>{lastRound.week_key} 당첨 번호</div>
-                <div style={{ fontSize: 32, fontWeight: 800, color: T.accent, letterSpacing: 4, marginBottom: 8 }}>#{String(lastRound.winning_number).padStart(4, '0')}</div>
-                <div style={{ fontSize: 13, color: lastRound.winner_user_id ? T.success : T.textMuted, fontWeight: 600 }}>{lastRound.winner_user_id ? "🎉 당첨자 있음" : "당첨자 없음"}</div>
-              </div>
-            </div>
-          )}
 
           {isDrawn && (
             <div style={{ marginBottom: 20 }}>
@@ -2269,7 +2263,6 @@ ${diaryCtx}`;
 
           <div style={{textAlign:"center", marginTop:20, fontSize:11, color:T.textSub, lineHeight:1.8}}>
             <div>© 2026 GYEOL. All rights reserved.</div>
-            <VisitorCounter/>
           </div>
         </div>
       );

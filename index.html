@@ -488,9 +488,11 @@
       </p>
       <p style="margin-bottom: 6px; font-size: 12px;">문의: diary.gyeol@gmail.com</p>
       <p>&copy; 2026 GYEOL. All rights reserved.</p>
+      <p id="visitor-count" style="margin-top: 6px; font-size: 11px; color: var(--text-tertiary);"></p>
     </div>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
@@ -498,6 +500,34 @@
       });
     }, { threshold: 0.15 });
     document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
+
+    // 누적 방문자 카운터
+    (async function() {
+      try {
+        const sb = window.supabase.createClient(
+          'https://vgtpjvwtpzvxxlizsvos.supabase.co',
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs'
+        );
+        let count;
+        if (sessionStorage.getItem('gyeol_visited')) {
+          const { data } = await sb.from('site_stats').select('value').eq('key', 'visit_count').single();
+          count = data?.value || 0;
+        } else {
+          sessionStorage.setItem('gyeol_visited', '1');
+          const { data: existing } = await sb.from('site_stats').select('value').eq('key', 'visit_count').single();
+          if (existing) {
+            count = (existing.value || 0) + 1;
+            await sb.from('site_stats').update({ value: count }).eq('key', 'visit_count');
+          } else {
+            await sb.from('site_stats').insert({ key: 'visit_count', value: 1 });
+            count = 1;
+          }
+        }
+        document.getElementById('visitor-count').textContent = '누적 방문객: ' + count.toLocaleString() + '명';
+      } catch (e) {
+        console.error('방문자 카운트 오류:', e);
+      }
+    })();
   </script>
 
 </body>
