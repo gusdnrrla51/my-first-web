@@ -167,7 +167,7 @@
     }
 
     // ========================================================
-    // 🤖 Gemini AI 헬퍼 (Supabase Edge Function 경유 - API 키 서버에서 관리)
+    // ✨ Gemini AI 헬퍼 (Supabase Edge Function 경유 - API 키 서버에서 관리)
     // ========================================================
     async function callGemini(prompt) {
       try {
@@ -974,7 +974,7 @@
                       <div style={{marginTop:10, paddingTop:10, borderTop:`1px solid ${T.border}`}}>
                         <button onClick={e=>{e.stopPropagation(); onAI(d);}}
                           style={{width:"100%", padding:"8px 0", border:`1px solid ${T.accentLight||T.accent+"44"}`, borderRadius:10, background:T.accentBg||T.accent+"11", color:T.accent, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5, minHeight:36}}>
-                          {d.ai_analysis ? "🤖 AI 분석 보기 · 저장됨" : "🤖 AI 분석 보기"}
+                          {d.ai_analysis ? "✨ AI 분석 보기 · 저장됨" : "✨ AI 분석 보기"}
                         </button>
                       </div>
                     </div>
@@ -1115,7 +1115,7 @@
             </button>
           </div>
           {loading && (
-            <div style={{ marginTop:14, fontSize:13, opacity:0.85, textAlign:"center", padding:"8px 0" }}>🤖 AI가 일기를 읽고 있어요...</div>
+            <div style={{ marginTop:14, fontSize:13, opacity:0.85, textAlign:"center", padding:"8px 0" }}>✨ AI가 일기를 읽고 있어요...</div>
           )}
           {summary && expanded && (
             <div style={{ marginTop:14, fontSize:13, lineHeight:1.85, whiteSpace:"pre-line", opacity:0.95, borderTop:"1px solid rgba(255,255,255,0.2)", paddingTop:14 }}>{summary}</div>
@@ -1125,7 +1125,7 @@
     }
 
     // ========================================================
-    // 🤖 DiaryAIModal — 개별 일기 AI 분석 팝업 (아래에서 올라오는 시트)
+    // ✨ DiaryAIModal — 개별 일기 AI 분석 팝업 (아래에서 올라오는 시트)
     // 특정 일기 하나를 Gemini AI가 분석하여 감정/하이라이트/응원 제공
     // 분석 결과는 DB(ai_analysis 컬럼)에 저장 + localStorage 캐싱
     // 이미 분석한 일기는 재분석 없이 저장된 결과를 바로 표시
@@ -1161,7 +1161,7 @@
           <div onClick={e=>e.stopPropagation()} style={{ background:T.card, borderRadius:"20px 20px 0 0", maxHeight:"82vh", display:"flex", flexDirection:"column", boxShadow:"0 -8px 40px rgba(0,0,0,0.18)", paddingBottom:`env(safe-area-inset-bottom,0px)` }}>
             <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#4A3728,#7A5C44)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🤖</div>
+                <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#4A3728,#7A5C44)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>✨</div>
                 <div>
                   <div style={{ fontSize:15, fontWeight:700, color:T.text }}>AI 일기 분석</div>
                   <div style={{ fontSize:11, color:T.textSub, marginTop:1, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -1175,7 +1175,7 @@
             <div style={{ flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch", padding:20 }}>
               {loading ? (
                 <div style={{ textAlign:"center", padding:"50px 0", color:T.textSub }}>
-                  <div style={{ fontSize:44, marginBottom:14, animation:"pulse 1.5s infinite" }}>🤖</div>
+                  <div style={{ fontSize:44, marginBottom:14, animation:"pulse 1.5s infinite" }}>✨</div>
                   <div style={{ fontSize:14, fontWeight:600, color:T.text, marginBottom:6 }}>AI가 일기를 읽고 있어요</div>
                   <div style={{ fontSize:12, opacity:0.7 }}>잠시만 기다려주세요...</div>
                 </div>
@@ -1825,7 +1825,7 @@ ${diaryCtx}`;
               </div>
               <button onClick={handleAnalyze} disabled={analyzing || diaryCount === 0}
                 style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: diaryCount > 0 ? T.gradient : T.border, color: diaryCount > 0 ? "#fff" : T.textSub, fontSize: 16, fontWeight: 700, cursor: diaryCount > 0 ? "pointer" : "default", opacity: analyzing ? 0.7 : 1, minHeight: 52 }}>
-                {analyzing ? "🤖 AI가 분석 중..." : "나의 결 유형 분석하기"}
+                {analyzing ? "✨ AI가 분석 중..." : "나의 결 유형 분석하기"}
               </button>
             </div>
           </div>

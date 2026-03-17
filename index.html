@@ -488,7 +488,6 @@
       </p>
       <p style="margin-bottom: 6px; font-size: 12px;">문의: diary.gyeol@gmail.com</p>
       <p>&copy; 2026 GYEOL. All rights reserved.</p>
-      <p id="visitor-count" style="margin-top: 6px; font-size: 11px; color: var(--text-tertiary);"></p>
     </div>
   </footer>
 
@@ -501,47 +500,6 @@
     }, { threshold: 0.15 });
     document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
 
-    // 누적 + 오늘 방문자 카운터
-    (async function() {
-      try {
-        const sb = window.supabase.createClient(
-          'https://vgtpjvwtpzvxxlizsvos.supabase.co',
-          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs'
-        );
-        const today = new Date().toISOString().slice(0, 10);
-        const todayKey = 'visit_today_' + today;
-        let total, todayCount;
-        if (sessionStorage.getItem('gyeol_visited')) {
-          const { data: t } = await sb.from('site_stats').select('value').eq('key', 'visit_count').single();
-          total = t?.value || 0;
-          const { data: d } = await sb.from('site_stats').select('value').eq('key', todayKey).single();
-          todayCount = d?.value || 0;
-        } else {
-          sessionStorage.setItem('gyeol_visited', '1');
-          // 누적 카운트 증가
-          const { data: existing } = await sb.from('site_stats').select('value').eq('key', 'visit_count').single();
-          if (existing) {
-            total = (existing.value || 0) + 1;
-            await sb.from('site_stats').update({ value: total }).eq('key', 'visit_count');
-          } else {
-            await sb.from('site_stats').insert({ key: 'visit_count', value: 1 });
-            total = 1;
-          }
-          // 오늘 카운트 증가
-          const { data: todayExisting } = await sb.from('site_stats').select('value').eq('key', todayKey).single();
-          if (todayExisting) {
-            todayCount = (todayExisting.value || 0) + 1;
-            await sb.from('site_stats').update({ value: todayCount }).eq('key', todayKey);
-          } else {
-            await sb.from('site_stats').insert({ key: todayKey, value: 1 });
-            todayCount = 1;
-          }
-        }
-        document.getElementById('visitor-count').textContent = '오늘 ' + todayCount.toLocaleString() + '명 · 누적 ' + total.toLocaleString() + '명';
-      } catch (e) {
-        console.error('방문자 카운트 오류:', e);
-      }
-    })();
   </script>
 
 </body>
