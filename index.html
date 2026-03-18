@@ -281,6 +281,7 @@
           나의 결 찾기 →
         </a>
       </div>
+      <div id="visitor-counter" class="fade-up" style="margin-top: 24px; font-size: 13px; color: var(--text-tertiary); letter-spacing: 0.3px;"></div>
 
       <!-- Preview Mockup -->
       <div class="preview fade-up" style="animation-delay: 0.35s;">
@@ -500,6 +501,43 @@
     }, { threshold: 0.15 });
     document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
 
+    // 방문자 카운터
+    (async function() {
+      const SUPABASE_URL = 'https://vgtpjvwtpzvxxlizsvos.supabase.co';
+      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZndHBqdnd0cHp2eHhsaXpzdm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0ODg1NjMsImV4cCI6MjA4NzA2NDU2M30.k1dm3cjQz0K8M4cc9vrxh11ET39u41SsxyWPWdTvOLs';
+      const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const today = new Date().toISOString().slice(0, 10);
+      const todayKey = 'visit_today_' + today;
+
+      try {
+        if (!sessionStorage.getItem('gyeol_visited')) {
+          sessionStorage.setItem('gyeol_visited', '1');
+          // 누적 카운트 증가
+          const { data: existing } = await sb.from('site_stats').select('value').eq('key', 'visit_count').single();
+          if (existing) {
+            await sb.from('site_stats').update({ value: (existing.value || 0) + 1 }).eq('key', 'visit_count');
+          } else {
+            await sb.from('site_stats').insert({ key: 'visit_count', value: 1 });
+          }
+          // 오늘 카운트 증가
+          const { data: todayExisting } = await sb.from('site_stats').select('value').eq('key', todayKey).single();
+          if (todayExisting) {
+            await sb.from('site_stats').update({ value: (todayExisting.value || 0) + 1 }).eq('key', todayKey);
+          } else {
+            await sb.from('site_stats').insert({ key: todayKey, value: 1 });
+          }
+        }
+        // 표시
+        const { data: t } = await sb.from('site_stats').select('value').eq('key', 'visit_count').single();
+        const { data: d } = await sb.from('site_stats').select('value').eq('key', todayKey).single();
+        const total = t?.value || 0;
+        const todayCount = d?.value || 0;
+        document.getElementById('visitor-counter').textContent =
+          '오늘 ' + todayCount.toLocaleString() + '명 · 누적 ' + total.toLocaleString() + '명';
+      } catch (e) {
+        console.error('방문자 카운트 오류:', e);
+      }
+    })();
   </script>
 
 </body>
