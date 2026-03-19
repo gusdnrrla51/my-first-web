@@ -1445,9 +1445,11 @@ ${diaryCtx}`;
     function RaffleTab({ ticketCount, onTicketChange }) {
       const { user } = useAuth();
       const [loading, setLoading] = useState(true);
-      const [myEntries, setMyEntries] = useState([]);
+      const [myEntries, setMyEntries] = useState([]);         // 이번 주 응모
+      const [nextWeekEntries, setNextWeekEntries] = useState([]); // 다음 주 응모
       const [currentRound, setCurrentRound] = useState(null);
       const [lastRound, setLastRound] = useState(null);
+      const [winnerBanner, setWinnerBanner] = useState(null);  // 당첨자 배너 정보
       const [entering, setEntering] = useState(false);
       const [newNumber, setNewNumber] = useState(null);
       const [showWinPopup, setShowWinPopup] = useState(false);
@@ -1458,19 +1460,31 @@ ${diaryCtx}`;
 
       const status = getRaffleStatus();
       const currentWeek = getWeekKey();
-      const activeWeek = (() => {
+      // 응모가 들어갈 주차 (토요일 18시 이후 → 다음 주차)
+      const entryWeek = (() => {
         const now = new Date();
-        // 토요일 21시 이후: 월요일 기준으로 다음 주차 계산
-        if (now.getDay() === 6 && now.getHours() >= 21) {
+        if (now.getDay() === 6 && now.getHours() >= 18) {
           const next = new Date(now); next.setDate(next.getDate() + 2);
           return getWeekKey(next);
         }
-        // 일요일: 월요일 기준으로 다음 주차 계산
         if (now.getDay() === 0) {
           const next = new Date(now); next.setDate(next.getDate() + 1);
           return getWeekKey(next);
         }
         return currentWeek;
+      })();
+      // 이번 주 추첨 대상 주차 (현재 ISO 주차)
+      const drawWeek = currentWeek;
+      // 다음 주 주차 키
+      const nextWeek = (() => {
+        const now = new Date();
+        const daysToAdd = now.getDay() === 0 ? 1 : (6 - now.getDay() + 2);
+        const next = new Date(now); next.setDate(next.getDate() + daysToAdd);
+        return getWeekKey(next);
+      })();
+      const isAfterDeadline = (() => {
+        const now = new Date();
+        return (now.getDay() === 6 && now.getHours() >= 18) || now.getDay() === 0;
       })();
 
       useEffect(() => {
@@ -1493,10 +1507,20 @@ ${diaryCtx}`;
         if (!user) return;
         (async () => {
           setLoading(true);
-          const { data: entries } = await sb.from('raffle_entries').select('*').eq('user_id', user.id).eq('week_key', activeWeek).order('created_at', { ascending: false });
+          // 이번 주 응모 내역
+          const { data: entries } = await sb.from('raffle_entries').select('*').eq('user_id', user.id).eq('week_key', drawWeek).order('created_at', { ascending: false });
           if (entries) setMyEntries(entries);
-          const { data: round } = await sb.from('raffle_rounds').select('*').eq('week_key', activeWeek).single();
+          // 다음 주 응모 내역 (마감 후 응모한 것)
+          if (entryWeek !== drawWeek) {
+            const { data: nextEntries } = await sb.from('raffle_entries').select('*').eq('user_id', user.id).eq('week_key', entryWeek).order('created_at', { ascending: false });
+            if (nextEntries) setNextWeekEntries(nextEntries);
+          } else {
+            setNextWeekEntries([]);
+          }
+          // 이번 주 라운드
+          const { data: round } = await sb.from('raffle_rounds').select('*').eq('week_key', drawWeek).single();
           setCurrentRound(round);
+          // 지난 주 라운드 (당첨 확인)
           const lastWeekDate = new Date(); lastWeekDate.setDate(lastWeekDate.getDate() - 7);
           const lastWeekKey = getWeekKey(lastWeekDate);
           const { data: prevRound } = await sb.from('raffle_rounds').select('*').eq('week_key', lastWeekKey).single();
@@ -1505,48 +1529,74 @@ ${diaryCtx}`;
             const { data: claim } = await sb.from('raffle_claims').select('id').eq('user_id', user.id).eq('week_key', lastWeekKey).single();
             if (!claim) { setWinnerWeek(lastWeekKey); setShowWinPopup(true); }
           }
+          // 토요일 당첨자 배너: 이번 주 또는 지난 주 당첨자 표시
+          const now = new Date();
+          if (now.getDay() === 6) {
+            const bannerRound = round?.status === 'drawn' ? round : prevRound?.status === 'drawn' ? prevRound : null;
+            if (bannerRound?.winner_email_masked) {
+              setWinnerBanner(bannerRound.winner_email_masked);
+            }
+          } else {
+            setWinnerBanner(null);
+          }
           setLoading(false);
         })();
-      }, [user, activeWeek]);
+      }, [user, drawWeek, entryWeek]);
 
       // 추첨 트리거 (토 20시~21시) — 발급된 번호 중에서 무조건 당첨
       useEffect(() => {
         if (status !== 'drawing' || !user) return;
         (async () => {
-          const { data: round } = await sb.from('raffle_rounds').select('*').eq('week_key', currentWeek).single();
-          if (round?.status === 'drawn') { setCurrentRound(round); return; }
+          const { data: round } = await sb.from('raffle_rounds').select('*').eq('week_key', drawWeek).single();
+          if (round?.status === 'drawn') { setCurrentRound(round); if (round.winner_email_masked) setWinnerBanner(round.winner_email_masked); return; }
           // 이번 주 모든 응모 번호 조회
-          const { data: allEntries } = await sb.from('raffle_entries').select('number, user_id').eq('week_key', currentWeek);
-          if (!allEntries || allEntries.length === 0) return; // 응모자 없으면 추첨 안 함
+          const { data: allEntries } = await sb.from('raffle_entries').select('number, user_id').eq('week_key', drawWeek);
+          if (!allEntries || allEntries.length === 0) return;
           // 발급된 번호 중 랜덤 선택 → 무조건 당첨자 발생
           const winner = allEntries[Math.floor(Math.random() * allEntries.length)];
           const winNum = winner.number;
           const winnerId = winner.user_id;
-          if (round) {
-            await sb.from('raffle_rounds').update({ winning_number: winNum, winner_user_id: winnerId, status: 'drawn' }).eq('week_key', currentWeek);
-          } else {
-            await sb.from('raffle_rounds').insert({ week_key: currentWeek, winning_number: winNum, winner_user_id: winnerId, status: 'drawn' });
+          // 당첨자 이메일 마스킹 처리
+          let maskedEmail = '';
+          const { data: winnerProfile } = await sb.from('user_profiles').select('email').eq('user_id', winnerId).single();
+          if (winnerProfile?.email) {
+            const email = winnerProfile.email;
+            const [local, domain] = email.split('@');
+            maskedEmail = 'x'.repeat(Math.min(3, local.length)) + local.slice(3) + '@' + domain;
           }
-          const { data: updated } = await sb.from('raffle_rounds').select('*').eq('week_key', currentWeek).single();
+          const updateData = { winning_number: winNum, winner_user_id: winnerId, status: 'drawn', winner_email_masked: maskedEmail || null };
+          if (round) {
+            await sb.from('raffle_rounds').update(updateData).eq('week_key', drawWeek);
+          } else {
+            await sb.from('raffle_rounds').insert({ week_key: drawWeek, ...updateData });
+          }
+          const { data: updated } = await sb.from('raffle_rounds').select('*').eq('week_key', drawWeek).single();
           setCurrentRound(updated);
-          if (updated?.winner_user_id === user.id) { setWinnerWeek(currentWeek); setShowWinPopup(true); }
+          if (updated?.winner_email_masked) setWinnerBanner(updated.winner_email_masked);
+          if (updated?.winner_user_id === user.id) { setWinnerWeek(drawWeek); setShowWinPopup(true); }
         })();
       }, [status, user]);
 
       const handleEnter = async () => {
-        if (ticketCount < 1 || entering || status !== 'open') return;
+        if (ticketCount < 1 || entering) return;
         setEntering(true); setNewNumber(null);
         const number = Math.floor(Math.random() * 10000) + 1;
-        const { data: round } = await sb.from('raffle_rounds').select('id').eq('week_key', activeWeek).single();
-        if (!round) await sb.from('raffle_rounds').insert({ week_key: activeWeek, status: 'open' });
-        const { error: entryErr } = await sb.from('raffle_entries').insert({ user_id: user.id, number, week_key: activeWeek });
+        const targetWeek = entryWeek; // 마감 후에는 자동으로 다음 주
+        const { data: round } = await sb.from('raffle_rounds').select('id').eq('week_key', targetWeek).single();
+        if (!round) await sb.from('raffle_rounds').insert({ week_key: targetWeek, status: 'open' });
+        const { error: entryErr } = await sb.from('raffle_entries').insert({ user_id: user.id, number, week_key: targetWeek });
         if (entryErr) { alert('응모 중 오류가 발생했습니다.'); setEntering(false); return; }
         const { data: profile } = await sb.from('user_profiles').select('ticket_count').eq('user_id', user.id).single();
         const newCount = Math.max(0, (profile?.ticket_count || 0) - 1);
         await sb.from('user_profiles').update({ ticket_count: newCount }).eq('user_id', user.id);
         onTicketChange(newCount);
         setNewNumber(number);
-        setMyEntries(prev => [{ id: 'new-' + Date.now(), number, week_key: activeWeek, created_at: new Date().toISOString() }, ...prev]);
+        const newEntry = { id: 'new-' + Date.now(), number, week_key: targetWeek, created_at: new Date().toISOString() };
+        if (targetWeek === drawWeek) {
+          setMyEntries(prev => [newEntry, ...prev]);
+        } else {
+          setNextWeekEntries(prev => [newEntry, ...prev]);
+        }
         setTimeout(() => setEntering(false), 500);
       };
 
@@ -1566,10 +1616,43 @@ ${diaryCtx}`;
       );
 
       const isDrawn = currentRound?.status === 'drawn';
-      const statusLabel = status === 'closed' ? '⏳ 응모 마감 — 추첨 대기 중' : status === 'drawing' ? '🎰 추첨 진행 중...' : null;
+      const statusLabel = status === 'closed' ? '⏳ 이번 주 응모 마감 — 추첨 대기 중' : status === 'drawing' ? '🎰 추첨 진행 중...' : null;
+      const canEnter = ticketCount >= 1 && !entering;
+      const entryLabel = entering ? "🎰 번호 추첨 중..." : ticketCount < 1 ? "응모권이 없습니다 — 일기를 작성해보세요" : isAfterDeadline ? "🎟️ 다음 주 응모하기" : "🎟️ 응모하기";
+
+      // 번호 목록 렌더링 헬퍼
+      const renderEntryList = (entries, highlightNew) => (
+        entries.length === 0 ? (
+          <div style={{ background: T.card, borderRadius: 14, padding: "20px", textAlign: "center", boxShadow: T.shadow }}>
+            <div style={{ fontSize: 13, color: T.textSub }}>아직 응모한 번호가 없어요</div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {entries.map((e, i) => (
+              <div key={e.id} style={{ background: T.card, borderRadius: 12, padding: "14px 18px", boxShadow: T.shadow, display: "flex", alignItems: "center", justifyContent: "space-between", border: highlightNew && i === 0 && newNumber === e.number ? "2px solid #FFD700" : `1px solid ${T.border}`, animation: highlightNew && i === 0 && newNumber === e.number ? "slideUp 0.3s ease" : "none" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: T.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🎟️</div>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: T.text, letterSpacing: 2 }}>#{String(e.number).padStart(4, '0')}</span>
+                </div>
+                <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(e.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })} {new Date(e.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            ))}
+          </div>
+        )
+      );
 
       return (
         <div style={{ padding: "20px 16px", paddingBottom: 40 }}>
+
+          {/* 🎉 당첨자 축하 배너 (토요일 하루) */}
+          {winnerBanner && (
+            <div style={{ background: "linear-gradient(135deg,#FFD700,#FFA500)", borderRadius: 16, padding: "18px 20px", marginBottom: 16, textAlign: "center", animation: "slideUp 0.4s ease" }}>
+              <div style={{ fontSize: 24, marginBottom: 6 }}>🎉</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#4A3728", marginBottom: 4 }}>축하합니다!</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#4A3728" }}>{winnerBanner} 고객님이 당첨됐습니다!</div>
+            </div>
+          )}
+
           <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 4 }}>응모</div>
           <div style={{ fontSize: 13, color: T.textSub, marginBottom: 16 }}>일기를 쓰고 추첨에 참여하세요!</div>
 
@@ -1579,7 +1662,7 @@ ${diaryCtx}`;
 
           {/* 응모 카드 */}
           <div style={{ background: "linear-gradient(135deg,#4A3728,#7A5C44)", borderRadius: 20, padding: "24px 20px", marginBottom: 20, color: "#fff", boxShadow: "0 6px 24px rgba(74,55,40,0.3)", textAlign: "center" }}>
-            <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>마감까지</div>
+            <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>{isAfterDeadline ? '다음 주 마감까지' : '마감까지'}</div>
             <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 16, letterSpacing: 2 }}>{countdown}</div>
             <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: 16, padding: "20px", marginBottom: 16 }}>
               <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 6 }}>나의 응모권</div>
@@ -1588,37 +1671,29 @@ ${diaryCtx}`;
             </div>
             {newNumber && (
               <div style={{ marginBottom: 16, animation: "slideUp 0.5s ease" }}>
-                <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>부여된 번호</div>
+                <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>부여된 번호{isAfterDeadline ? ' (다음 주)' : ''}</div>
                 <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: 6, color: "#FFD700" }}>#{String(newNumber).padStart(4, '0')}</div>
               </div>
             )}
-            <button onClick={handleEnter} disabled={ticketCount < 1 || entering || status !== 'open'}
-              style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: (ticketCount > 0 && status === 'open') ? "linear-gradient(135deg,#FFD700,#FFA500)" : "rgba(255,255,255,0.1)", color: (ticketCount > 0 && status === 'open') ? "#4A3728" : "rgba(255,255,255,0.4)", fontSize: 16, fontWeight: 800, cursor: (ticketCount > 0 && status === 'open') ? "pointer" : "default", minHeight: 52 }}>
-              {entering ? "🎰 번호 추첨 중..." : status !== 'open' ? "현재 응모 불가" : ticketCount < 1 ? "응모권이 없습니다 — 일기를 작성해보세요" : "🎟️ 응모하기"}
+            <button onClick={handleEnter} disabled={!canEnter}
+              style={{ width: "100%", padding: 16, borderRadius: 14, border: "none", background: canEnter ? "linear-gradient(135deg,#FFD700,#FFA500)" : "rgba(255,255,255,0.1)", color: canEnter ? "#4A3728" : "rgba(255,255,255,0.4)", fontSize: 16, fontWeight: 800, cursor: canEnter ? "pointer" : "default", minHeight: 52 }}>
+              {entryLabel}
             </button>
           </div>
 
           {/* 이번 주 내 번호 */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>📋 이번 주 나의 번호</div>
-            {myEntries.length === 0 ? (
-              <div style={{ background: T.card, borderRadius: 14, padding: "20px", textAlign: "center", boxShadow: T.shadow }}>
-                <div style={{ fontSize: 13, color: T.textSub }}>아직 응모한 번호가 없어요</div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {myEntries.map((e, i) => (
-                  <div key={e.id} style={{ background: T.card, borderRadius: 12, padding: "14px 18px", boxShadow: T.shadow, display: "flex", alignItems: "center", justifyContent: "space-between", border: i === 0 && newNumber === e.number ? "2px solid #FFD700" : `1px solid ${T.border}`, animation: i === 0 && newNumber === e.number ? "slideUp 0.3s ease" : "none" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: T.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🎟️</div>
-                      <span style={{ fontSize: 18, fontWeight: 800, color: T.text, letterSpacing: 2 }}>#{String(e.number).padStart(4, '0')}</span>
-                    </div>
-                    <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(e.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })} {new Date(e.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {renderEntryList(myEntries, !isAfterDeadline)}
           </div>
+
+          {/* 다음 주 내 번호 (마감 후 응모분) */}
+          {(isAfterDeadline || nextWeekEntries.length > 0) && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>📋 다음 주 나의 번호</div>
+              {renderEntryList(nextWeekEntries, isAfterDeadline)}
+            </div>
+          )}
 
           {isDrawn && (
             <div style={{ marginBottom: 20 }}>
@@ -1637,8 +1712,8 @@ ${diaryCtx}`;
               • 일기 1개 작성 시 응모권 1개가 지급됩니다<br/>
               • 응모 시 1~10,000 중 랜덤 번호가 부여됩니다<br/>
               • 매주 토요일 오후 6시에 응모가 마감됩니다<br/>
+              • 오후 6시 이후 응모는 다음 주에 반영됩니다<br/>
               • 매주 토요일 오후 8시에 당첨 번호가 추첨됩니다<br/>
-              • 토요일 오후 9시부터 새 주차 응모가 시작됩니다<br/>
               • 당첨 시 정보를 제출하면 상품이 지급됩니다
             </div>
           </div>
@@ -2385,14 +2460,14 @@ ${diaryCtx}`;
           const { data: newEntry, error } = await sb.from('diary_entries').insert({ ...data, user_id: user.id }).select().single();
           if (newEntry) {
             setDiaries([newEntry, ...diaries]);
-            // 🎟️ 새 일기 작성 시 응모권 1개 지급
+            // 🎟️ 새 일기 작성 시 응모권 1개 지급 + 이메일 저장 (당첨자 표시용)
             const { data: prof } = await sb.from('user_profiles').select('id, ticket_count').eq('user_id', user.id).single();
             if (prof) {
               const newCount = (prof.ticket_count || 0) + 1;
-              await sb.from('user_profiles').update({ ticket_count: newCount }).eq('user_id', user.id);
+              await sb.from('user_profiles').update({ ticket_count: newCount, email: user.email }).eq('user_id', user.id);
               setTicketCount(newCount);
             } else {
-              await sb.from('user_profiles').insert({ user_id: user.id, ticket_count: 1, display_name: user.name });
+              await sb.from('user_profiles').insert({ user_id: user.id, ticket_count: 1, display_name: user.name, email: user.email });
               setTicketCount(1);
             }
           }
